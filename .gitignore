@@ -1,0 +1,24 @@
+# Local planning notes (private, not versioned)
+.ai/
+
+# Gradle / JVM
+.gradle/
+build/
+!gradle/wrapper/gradle-wrapper.jar
+
+# IntelliJ / IDE
+.idea/
+*.iml
+out/
+
+# IntelliJ Platform Gradle Plugin (sandbox, downloaded artifacts)
+.intellijPlatform/
+
+# Node (web/ static site)
+node_modules/
+web/dist/
+web/.astro/
+
+# OS
+.DS_Store
+Thumbs.db

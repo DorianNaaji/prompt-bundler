@@ -1,0 +1,17 @@
+<idea-plugin>
+    <id>dev.promptbundler</id>
+    <name>PromptBundler</name>
+    <vendor url="https://github.com/promptbundler/promptbundler">PromptBundler</vendor>
+
+    <description><![CDATA[
+        Assemble focused, token-aware prompts from your codebase, directly inside the IDE.
+        <br/>
+        This is a placeholder description; features land in later modules.
+    ]]></description>
+
+    <depends>com.intellij.modules.platform</depends>
+
+    <extensions defaultExtensionNs="com.intellij">
+        <!-- Extension points are registered by feature modules (M2+). -->
+    </extensions>
+</idea-plugin>
