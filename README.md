@@ -16,7 +16,6 @@ LLM. The output is plain text on your clipboard, so it goes anywhere.
 ## What it does
 
 - Bundles the files and snippets you pick into one structured prompt, with their tree.
-- Tells you the token count up front, so you know it fits the chat's context window.
 - Reuses a template so every prompt looks the same.
 - Keeps a history of past prompts.
 

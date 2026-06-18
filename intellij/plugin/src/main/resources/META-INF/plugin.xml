@@ -4,7 +4,7 @@
     <vendor url="https://github.com/promptbundler/promptbundler">PromptBundler</vendor>
 
     <description><![CDATA[
-        Assemble focused, token-aware prompts from your codebase, directly inside the IDE.
+        Assemble focused prompts from your codebase, directly inside the IDE.
         <br/>
         This is a placeholder description; features land in later modules.
     ]]></description>
