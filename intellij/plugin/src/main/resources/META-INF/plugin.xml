@@ -12,6 +12,8 @@
     <depends>com.intellij.modules.platform</depends>
 
     <extensions defaultExtensionNs="com.intellij">
-        <!-- Extension points are registered by feature modules (M2+). -->
+        <toolWindow id="Prompt Bundler" anchor="right" doNotActivateOnStart="true"
+                    factoryClass="dev.promptbundler.plugin.toolwindow.ChatToolWindowFactory"
+                    icon="/icons/promptBundler.svg"/>
     </extensions>
 </idea-plugin>

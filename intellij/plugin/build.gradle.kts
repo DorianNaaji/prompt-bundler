@@ -1,12 +1,21 @@
+import org.jetbrains.intellij.platform.gradle.TestFrameworkType
+
 plugins {
     alias(libs.plugins.kotlin.jvm)
     alias(libs.plugins.intellij.platform)
 }
 
-version = "0.1.0"
+version = "0.1.1"
 
 kotlin {
     jvmToolchain(21)
+    compilerOptions {
+        // Compile inherited Kotlin-interface default members as real JVM defaults instead
+        // of delegating bridges. Without this, implementing ToolWindowFactory generates
+        // synthetic overrides of its @ApiStatus.Internal members (anchor/icon/manage),
+        // which the Plugin Verifier flags as INTERNAL_API_USAGES.
+        freeCompilerArgs.add("-Xjvm-default=all")
+    }
 }
 
 repositories {
@@ -24,7 +33,14 @@ dependencies {
         // dependency. Compatibility with newer IDEs (2025.2+, 2026.x and beyond) comes
         // from the open untilBuild below and is confirmed by the Plugin Verifier.
         intellijIdeaCommunity("2025.1.7")
+
+        // Platform fixtures for BasePlatformTestCase (registration + clipboard tests).
+        testFramework(TestFrameworkType.Platform)
     }
+
+    // BasePlatformTestCase is a JUnit3/4 test case, so the plugin keeps JUnit4 for its
+    // platform tests. The engine module stays on JUnit5 independently.
+    testImplementation(libs.junit4)
 }
 
 intellijPlatform {
