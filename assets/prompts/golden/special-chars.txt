@@ -2,10 +2,19 @@ You are an expert software developer. Analyze the technical context below and
 answer the final request based exclusively on these elements.
 
 ### CONTEXT TREE
-{tree}
+a.b.c
+└── d.e.f.txt
+docs
+└── résumé final.md
 
 ### FILE CONTENTS
-{files}
+<file path="a.b.c/d.e.f.txt">
+dots
+</file>
+
+<file path="docs/résumé final.md">
+Café
+</file>
 
 ### USER REQUEST
-{query}
+Check the localized assets.

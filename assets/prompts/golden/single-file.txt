@@ -2,10 +2,14 @@ You are an expert software developer. Analyze the technical context below and
 answer the final request based exclusively on these elements.
 
 ### CONTEXT TREE
-{tree}
+README.md
 
 ### FILE CONTENTS
-{files}
+<file path="README.md">
+# Demo
+
+A tiny project.
+</file>
 
 ### USER REQUEST
-{query}
+Explain what this project does.

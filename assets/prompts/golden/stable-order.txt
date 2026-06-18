@@ -1,0 +1,26 @@
+You are an expert software developer. Analyze the technical context below and
+answer the final request based exclusively on these elements.
+
+### CONTEXT TREE
+src
+├── main
+│   └── App.kt
+└── test
+    └── AppTest.kt
+README.md
+
+### FILE CONTENTS
+<file path="README.md">
+readme
+</file>
+
+<file path="src/main/App.kt">
+main
+</file>
+
+<file path="src/test/AppTest.kt">
+test
+</file>
+
+### USER REQUEST
+Q

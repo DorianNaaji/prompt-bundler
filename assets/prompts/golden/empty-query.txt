@@ -2,10 +2,12 @@ You are an expert software developer. Analyze the technical context below and
 answer the final request based exclusively on these elements.
 
 ### CONTEXT TREE
-{tree}
+notes.txt
 
 ### FILE CONTENTS
-{files}
+<file path="notes.txt">
+just some notes
+</file>
 
 ### USER REQUEST
-{query}
+
