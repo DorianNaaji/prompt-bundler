@@ -39,6 +39,13 @@ Early. Built module by module, no release yet. Star it to follow along.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md).
 
+## Support
+
+PromptBundler is free and open source, with no API, no account, and no network. If it saves you from copy-paste hell, you can support the project.
+
+[![Sponsor on GitHub](https://img.shields.io/badge/Sponsor-DorianNaaji-EA4AAA?logo=githubsponsors&logoColor=white)](https://github.com/sponsors/DorianNaaji)
+[![Buy Me a Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-support-FFDD00?logo=buymeacoffee&logoColor=black)](https://buymeacoffee.com/dorian.naaji)
+
 ## License
 
 [MIT](LICENSE).
