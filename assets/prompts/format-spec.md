@@ -10,24 +10,38 @@ The engine fills a template with three placeholders. The default template lives 
 `templates/default-template.md` and is embedded at build time:
 
 ```
-You are an expert software developer. Use the technical context below together with
-your own expertise to answer the final request. The context grounds your answer in
-this specific project; it does not limit you, so draw on your broader knowledge
-wherever it helps.
+You are an expert software developer. Your task is to answer the user's request using the
+technical context below together with your own expertise.
 
-### CONTEXT TREE
+Guidelines:
+- Ground your answer in the provided project context. If the context is empty or
+  insufficient, rely on your broader knowledge.
+- Do not invent files, functions, or APIs that are absent from the context, unless the
+  request explicitly asks you to create new ones.
+- Be concise. Explain your reasoning before writing code, and format every code change in a
+  proper markdown code block.
+
+<context_tree>
 {tree}
+</context_tree>
 
-### FILE CONTENTS
+<file_contents>
 {files}
+</file_contents>
 
 ### USER REQUEST
 {query}
 ```
 
-- `{tree}` - the project tree of all attached paths.
-- `{files}` - the content of each attached file, wrapped in a `<file>` block.
+- `{tree}` - the project tree of all attached paths, wrapped in a `<context_tree>` block.
+- `{files}` - the content of each attached file, each wrapped in a `<file>` block, the whole
+  set wrapped in a `<file_contents>` block.
 - `{query}` - the user request, verbatim (may be empty).
+
+The injected context is isolated inside XML tags (`<context_tree>`, `<file_contents>`,
+`<file>`) so the model never confuses raw project text with the instructions above it. The
+leading guidelines keep the answer grounded in the context, forbid inventing absent files,
+and ask for concise, markdown-formatted output.
 
 Placeholders are substituted in a single pass, so substituted content that itself contains
 `{tree}`, `{files}` or `{query}` is never re-expanded.
@@ -69,6 +83,18 @@ raw content
 - `path` is the project-relative path, verbatim (special characters preserved, not escaped).
 - Content is embedded verbatim; a single trailing newline is ensured before `</file>`.
 - Blocks are separated by one blank line.
+
+A selection snippet (a range pulled from a file rather than the whole file) carries an extra
+`lines` attribute with a 1-based, inclusive range:
+
+```
+<file path="src/main/kotlin/App.kt" lines="10-12">
+raw content
+</file>
+```
+
+When two items share a path, blocks are ordered by their starting line; an item without a
+`lines` attribute sorts before any snippet of the same path.
 
 ## Guards (not part of the output)
 

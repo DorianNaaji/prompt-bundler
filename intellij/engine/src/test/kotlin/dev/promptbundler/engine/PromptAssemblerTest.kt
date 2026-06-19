@@ -58,6 +58,24 @@ class PromptAssemblerTest {
     }
 
     @Test
+    fun `selection snippet carries its line range`() {
+        val request =
+            BundleRequest(
+                query = "Why does this loop never terminate?",
+                items =
+                    listOf(
+                        ContextItem("README.md", "# Demo\n"),
+                        ContextItem(
+                            relativePath = "src/main/kotlin/App.kt",
+                            content = "while (true) {\n    work()\n}\n",
+                            lines = 10..12,
+                        ),
+                    ),
+            )
+        GoldenSupport.assertMatches("selection-snippet.txt", PromptAssembler.assemble(request).text)
+    }
+
+    @Test
     fun `paths with special characters`() {
         val request =
             BundleRequest(

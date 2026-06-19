@@ -8,10 +8,14 @@ package dev.promptbundler.engine
  *   expected to be project-relative and to use `/` as separator, independent of the host
  *   operating system. Leading and trailing slashes are ignored by the renderers.
  * @property content the raw text content, embedded as-is (no escaping, no trimming).
+ * @property lines optional 1-based, inclusive line range when the item is a selection
+ *   snippet rather than a whole file. `null` means the full file: the file block then omits
+ *   the `lines` attribute and renders exactly as before.
  */
 data class ContextItem(
     val relativePath: String,
     val content: String,
+    val lines: IntRange? = null,
 )
 
 /**

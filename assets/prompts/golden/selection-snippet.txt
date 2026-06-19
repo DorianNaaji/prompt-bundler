@@ -11,12 +11,9 @@ Guidelines:
 
 <context_tree>
 src
-├── main
-│   └── kotlin
-│       └── App.kt
-└── test
+└── main
     └── kotlin
-        └── AppTest.kt
+        └── App.kt
 README.md
 </context_tree>
 
@@ -25,14 +22,12 @@ README.md
 # Demo
 </file>
 
-<file path="src/main/kotlin/App.kt">
-fun main() = println("hi")
-</file>
-
-<file path="src/test/kotlin/AppTest.kt">
-// TODO
+<file path="src/main/kotlin/App.kt" lines="10-12">
+while (true) {
+    work()
+}
 </file>
 </file_contents>
 
 ### USER REQUEST
-Why does the test fail?
+Why does this loop never terminate?
