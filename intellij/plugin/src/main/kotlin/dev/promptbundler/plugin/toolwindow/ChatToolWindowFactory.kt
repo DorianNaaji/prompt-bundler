@@ -17,8 +17,9 @@ class ChatToolWindowFactory :
         project: Project,
         toolWindow: ToolWindow,
     ) {
-        val panel = ChatToolWindowPanel()
+        val panel = ChatToolWindowPanel(project)
         val content = ContentFactory.getInstance().createContent(panel, "", false)
+        content.setDisposer(panel)
         toolWindow.contentManager.addContent(content)
     }
 }
