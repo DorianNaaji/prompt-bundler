@@ -15,6 +15,12 @@ LLM. The output is plain text on your clipboard, so it goes anywhere.
 
 ## What it does
 
+Attach files, whole folders, or a selected snippet from the editor, then ask your question
+in the tool window. PromptBundler assembles a single, well-structured prompt (a file tree
+plus the exact file contents) ready on your clipboard.
+
+- Attach context from the Project view, the editor selection, drag and drop, or a quick picker.
+- Binary and oversized files are skipped automatically.
 - Bundles the files and snippets you pick into one structured prompt, with their tree.
 - Reuses a template so every prompt looks the same.
 - Keeps a history of past prompts.
