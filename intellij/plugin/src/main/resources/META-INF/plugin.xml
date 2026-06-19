@@ -1,12 +1,19 @@
 <idea-plugin>
     <id>dev.promptbundler</id>
-    <name>PromptBundler</name>
-    <vendor url="https://github.com/promptbundler/promptbundler">PromptBundler</vendor>
+    <name>Prompt Bundler</name>
+    <vendor url="https://github.com/promptbundler/promptbundler">Prompt Bundler</vendor>
 
     <description><![CDATA[
-        Assemble focused prompts from your codebase, directly inside the IDE.
-        <br/>
-        This is a placeholder description; features land in later modules.
+        <b>Prompt Bundler</b> turns your codebase into focused, copy-ready prompts, without leaving the IDE.
+        <br/><br/>
+        Attach files, whole folders, or a selected snippet from the editor, then ask your question in the
+        tool window. Prompt Bundler assembles a single, well-structured prompt (a file tree plus the exact
+        file contents) that you can copy into any AI assistant or web chat.
+        <ul>
+            <li>Attach context from the Project view, the editor selection, drag and drop, or a quick picker.</li>
+            <li>Binary and oversized files are skipped automatically.</li>
+            <li>Everything stays local: nothing is sent anywhere, you stay in control of the copy.</li>
+        </ul>
     ]]></description>
 
     <depends>com.intellij.modules.platform</depends>
@@ -15,5 +22,23 @@
         <toolWindow id="Prompt Bundler" anchor="right" doNotActivateOnStart="true"
                     factoryClass="dev.promptbundler.plugin.toolwindow.ChatToolWindowFactory"
                     icon="/icons/promptBundler.svg"/>
+        <notificationGroup id="PromptBundler" displayType="BALLOON"/>
     </extensions>
+
+    <actions>
+        <action id="PromptBundler.AddFiles"
+                class="dev.promptbundler.plugin.actions.AddFilesToBundleAction"
+                text="Add to Prompt Bundler Context"
+                description="Attach the selected file(s) or folder(s) to the Prompt Bundler context"
+                icon="/icons/promptBundler.svg">
+            <add-to-group group-id="ProjectViewPopupMenu" anchor="last"/>
+        </action>
+        <action id="PromptBundler.AddSelection"
+                class="dev.promptbundler.plugin.actions.AddSelectionToContextAction"
+                text="Add to Prompt Bundler Context"
+                description="Attach the selected text as a snippet to the Prompt Bundler context"
+                icon="/icons/promptBundler.svg">
+            <add-to-group group-id="EditorPopupMenu" anchor="last"/>
+        </action>
+    </actions>
 </idea-plugin>
