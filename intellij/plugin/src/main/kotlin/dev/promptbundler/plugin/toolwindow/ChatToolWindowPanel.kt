@@ -86,8 +86,8 @@ private const val COMPOSER_PLACEHOLDER = "Ask your question for your web copilot
 private const val REQUEST_MARKER = "### USER REQUEST"
 private const val ARC = 16
 
-// Tallest the chips area may get before it scrolls instead of growing the composer (~4 rows).
-private const val CHIPS_MAX_HEIGHT = 104
+// Tallest the chips area may get before it scrolls instead of growing the composer (~5 rows).
+private const val CHIPS_MAX_HEIGHT = 140
 
 // The input text area always keeps at least this much height: when the composer pane is short
 // (e.g. dragged small) and many files are attached, the chips yield so the user still sees what
@@ -110,15 +110,20 @@ private const val NEW_SESSION_TITLE = "New session"
 
 // Persisted composer height (scaled px) and its bounds. The composer is pinned to the bottom and
 // resized by dragging the grip above it; the conversation above takes whatever space is left.
-private const val COMPOSER_HEIGHT_KEY = "promptbundler.composer.height"
-private const val COMPOSER_DEFAULT_HEIGHT = 168
+// Key carries a version suffix so the larger default below supersedes any height saved by an
+// earlier build (where a short docked window could lock the composer at its minimum).
+private const val COMPOSER_HEIGHT_KEY = "promptbundler.composer.height.v2"
+private const val COMPOSER_DEFAULT_HEIGHT = 218
 private const val COMPOSER_MIN_HEIGHT = 96
 
 // Space kept for the conversation/list above the composer so dragging can never swallow the panel.
-private const val COMPOSER_TOP_RESERVE = 120
+// Small on purpose: the conversation scrolls, so a tight reserve still lets a short, bottom-docked
+// tool window resize the composer instead of clamping max down to the minimum (which locks it).
+private const val COMPOSER_TOP_RESERVE = 64
 
-// The drag grip strip sitting just above the composer; thin, with a centered handle and N-resize cursor.
-private const val GRIP_HEIGHT = 9
+// The drag grip strip sitting just above the composer; with a centered handle and N-resize cursor.
+// Tall enough to grab comfortably without overlapping the composer's own top padding.
+private const val GRIP_HEIGHT = 12
 
 /**
  * The chat panel hosted by the PromptBundler tool window: a scrollable conversation on top
