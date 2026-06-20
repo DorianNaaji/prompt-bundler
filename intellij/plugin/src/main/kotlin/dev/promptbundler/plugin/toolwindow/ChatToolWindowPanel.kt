@@ -16,12 +16,14 @@ import com.intellij.openapi.fileEditor.impl.EditorHistoryManager
 import com.intellij.openapi.fileTypes.FileTypeManager
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.SimpleToolWindowPanel
+import com.intellij.openapi.ui.Splitter
 import com.intellij.openapi.ui.popup.JBPopupFactory
 import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.psi.PsiFileSystemItem
 import com.intellij.ui.ColoredListCellRenderer
 import com.intellij.ui.JBColor
+import com.intellij.ui.OnePixelSplitter
 import com.intellij.ui.SimpleTextAttributes
 import com.intellij.ui.components.JBLabel
 import com.intellij.ui.components.JBScrollPane
@@ -89,11 +91,6 @@ private const val ARC = 16
 // Tallest the chips area may get before it scrolls instead of growing the composer (~5 rows).
 private const val CHIPS_MAX_HEIGHT = 140
 
-// The input text area always keeps at least this much height: when the composer pane is short
-// (e.g. dragged small) and many files are attached, the chips yield so the user still sees what
-// they type instead of the chips swallowing the whole pane.
-private const val INPUT_MIN_HEIGHT = 44
-
 // Floor for the chips area so at least one row stays visible (and scrollable) even when squeezed.
 private const val CHIP_ROW_HEIGHT = 30
 
@@ -108,22 +105,17 @@ private const val CARD_CHAT = "chat"
 private const val CARD_LIST = "list"
 private const val NEW_SESSION_TITLE = "New session"
 
-// Persisted composer height (scaled px) and its bounds. The composer is pinned to the bottom and
-// resized by dragging the grip above it; the conversation above takes whatever space is left.
-// Key carries a version suffix so the larger default below supersedes any height saved by an
-// earlier build (where a short docked window could lock the composer at its minimum).
-private const val COMPOSER_HEIGHT_KEY = "promptbundler.composer.height.v2"
-private const val COMPOSER_DEFAULT_HEIGHT = 218
+// The conversation and the composer are the two halves of a draggable OnePixelSplitter, so the
+// resize is the platform's own divider drag (reliable, and the grab zone sits exactly on the
+// visible boundary) rather than a hand-rolled grip. We persist the TOP (conversation) fraction;
+// the composer is the bottom half and takes the rest. The composer also auto-grows with its typed
+// content up to COMPOSER_MAX_FRACTION of the panel, after which its input scrolls. The two minimum
+// heights are honored by the splitter so neither half can be crushed away.
+private const val COMPOSER_PROPORTION_KEY = "promptbundler.composer.topProportion.v3"
+private const val COMPOSER_DEFAULT_TOP_PROPORTION = 0.8f
+private const val COMPOSER_MAX_FRACTION = 0.72f
 private const val COMPOSER_MIN_HEIGHT = 96
-
-// Space kept for the conversation/list above the composer so dragging can never swallow the panel.
-// Small on purpose: the conversation scrolls, so a tight reserve still lets a short, bottom-docked
-// tool window resize the composer instead of clamping max down to the minimum (which locks it).
-private const val COMPOSER_TOP_RESERVE = 64
-
-// The drag grip strip sitting just above the composer; with a centered handle and N-resize cursor.
-// Tall enough to grab comfortably without overlapping the composer's own top padding.
-private const val GRIP_HEIGHT = 12
+private const val TOP_MIN_HEIGHT = 72
 
 /**
  * The chat panel hosted by the PromptBundler tool window: a scrollable conversation on top
@@ -180,17 +172,14 @@ class ChatToolWindowPanel(
                 val size = super.getPreferredSize()
                 var cap = JBUI.scale(CHIPS_MAX_HEIGHT)
 
-                // When the composer pane is short, shrink the cap so the input keeps at least
-                // INPUT_MIN_HEIGHT visible: the chips scroll within whatever is left rather than
-                // pushing the text area off-screen. Never drop below one (scrollable) row.
+                // Keep the chips to at most half the composer's inner height so the question area
+                // always keeps the other half (the 50/50 the user asked for): extra attachments
+                // scroll within their half instead of squeezing the input. Never below one row.
                 val boxHeight = composerBox.height
                 if (boxHeight > 0) {
-                    val reserved =
-                        JBUI.scale(COMPOSER_CHROME_HEIGHT) +
-                            controlsRow.preferredSize.height +
-                            JBUI.scale(INPUT_MIN_HEIGHT)
-                    val available = boxHeight - reserved
-                    if (available < cap) cap = available
+                    val inner = boxHeight - JBUI.scale(COMPOSER_CHROME_HEIGHT) - controlsRow.preferredSize.height
+                    val half = inner / 2
+                    if (half in 1 until cap) cap = half
                 }
                 cap = cap.coerceAtLeast(JBUI.scale(CHIP_ROW_HEIGHT))
 
@@ -210,17 +199,20 @@ class ChatToolWindowPanel(
     // (and for the input) when sizing itself.
     private val controlsRow = JPanel(FlowLayout(FlowLayout.RIGHT, JBUI.scale(6), 0))
 
-    // Current composer height (scaled px), restored from the last session and updated as the user
-    // drags the grip. The conversation above simply takes whatever vertical space is left over.
-    private var composerHeight =
-        PropertiesComponent.getInstance().getInt(COMPOSER_HEIGHT_KEY, JBUI.scale(COMPOSER_DEFAULT_HEIGHT))
+    // The conversation/list (top) and the composer (bottom) are the two halves of this splitter.
+    // We persist the top fraction; dragging the divider resizes the composer, and [adjustComposerHeight]
+    // also auto-grows it with typed content. The composer never rests below 1 - manualTopProportion.
+    private var manualTopProportion =
+        PropertiesComponent.getInstance().getFloat(COMPOSER_PROPORTION_KEY, COMPOSER_DEFAULT_TOP_PROPORTION)
 
-    // The bottom pane holding the grip + composer; its preferred height is [composerHeight], which is
-    // what BorderLayout.SOUTH honors. Kept as a field so a drag can revalidate it directly.
-    private lateinit var composerPane: JPanel
+    // Guards the splitter's proportion listener while we set the proportion ourselves (auto-grow),
+    // so a programmatic change is not mistaken for a user drag and persisted as the resting size.
+    private var adjustingSplitter = false
 
-    // The BorderLayout root (cards in CENTER, composerPane in SOUTH); revalidated after a resize.
-    private lateinit var rootPanel: JPanel
+    private lateinit var splitter: OnePixelSplitter
+
+    // The bottom half of the splitter: the composer (chips + scrollable input + controls).
+    private lateinit var composerPane: JComponent
 
     init {
         conversation.isOpaque = false
@@ -236,6 +228,7 @@ class ChatToolWindowPanel(
         connection.subscribe(SessionHistoryService.TOPIC, SessionHistoryListener { rebuildSessionList() })
 
         rebuildChips()
+        invokeLater { adjustComposerHeight() }
 
         // The sessions list is the home view: land there, with the composer ready to start a
         // brand new session on send (currentSessionId stays null until the first turn is sent).
@@ -255,98 +248,85 @@ class ChatToolWindowPanel(
     // --- Views ---------------------------------------------------------------------------
 
     /**
-     * Root layout: the two views (sessions list and conversation) fill the center, the single
-     * shared composer is pinned to the bottom. The composer is shared so it is present on both
-     * views (on the sessions home it starts a new session). Its height is user-controlled by the
-     * grip above it (see [buildComposerPane]); the center takes whatever space is left.
+     * Root layout: a draggable [OnePixelSplitter] with the two views (sessions list and conversation)
+     * on top and the single shared composer on the bottom. The composer is shared so it is present on
+     * both views (on the sessions home it starts a new session). The divider is the resize handle -
+     * it sits exactly on the boundary, so dragging it grows or shrinks the composer reliably; the
+     * composer also auto-grows with typed content (see [adjustComposerHeight]).
      */
     private fun buildRoot(): JComponent {
         cards.add(buildChatCard(), CARD_CHAT)
         cards.add(buildListCard(), CARD_LIST)
-        rootPanel =
-            JPanel(BorderLayout()).apply {
-                add(cards, BorderLayout.CENTER)
-                add(buildComposerPane(), BorderLayout.SOUTH)
-            }
-        return rootPanel
-    }
+        cards.minimumSize = Dimension(0, JBUI.scale(TOP_MIN_HEIGHT))
 
-    /**
-     * The bottom pane: a thin drag grip stacked over the composer. Pinned in the root's SOUTH,
-     * so BorderLayout sizes it to its preferred height - which we override to [composerHeight] -
-     * and the conversation above takes the rest. Dragging the grip drives [setComposerHeight].
-     */
-    private fun buildComposerPane(): JComponent {
-        composerPane =
-            object : JPanel(BorderLayout()) {
-                override fun getPreferredSize(): Dimension = super.getPreferredSize().also { it.height = composerHeight }
+        composerPane = buildComposer().apply { minimumSize = Dimension(0, JBUI.scale(COMPOSER_MIN_HEIGHT)) }
 
-                override fun getMinimumSize(): Dimension = super.getMinimumSize().also { it.height = JBUI.scale(COMPOSER_MIN_HEIGHT) }
-            }
-        return composerPane.apply {
-            isOpaque = false
-            add(buildComposerGrip(), BorderLayout.NORTH)
-            add(buildComposer(), BorderLayout.CENTER)
-        }
-    }
-
-    /**
-     * A slim strip above the composer that resizes it: dragging up grows the composer, down shrinks
-     * it. Paints a short centered handle and shows a vertical-resize cursor so the affordance reads
-     * at a glance. Tracks the pointer in screen coordinates, which stay stable while the strip itself
-     * moves as the pane is resized mid-drag.
-     */
-    private fun buildComposerGrip(): JComponent =
-        object : JPanel() {
-            init {
-                isOpaque = false
-                cursor = Cursor.getPredefinedCursor(Cursor.N_RESIZE_CURSOR)
-                preferredSize = Dimension(0, JBUI.scale(GRIP_HEIGHT))
-                val drag =
-                    object : MouseAdapter() {
-                        private var startScreenY = 0
-                        private var startHeight = 0
-
-                        override fun mousePressed(e: MouseEvent) {
-                            startScreenY = e.yOnScreen
-                            startHeight = composerHeight
-                        }
-
-                        override fun mouseDragged(e: MouseEvent) {
-                            setComposerHeight(startHeight + (startScreenY - e.yOnScreen))
-                        }
-                    }
-                addMouseListener(drag)
-                addMouseMotionListener(drag)
-            }
-
-            override fun paintComponent(g: Graphics) {
-                super.paintComponent(g)
-                val g2 = g.create() as Graphics2D
-                try {
-                    g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
-                    g2.color = JBColor.border()
-                    val w = JBUI.scale(28)
-                    val h = JBUI.scale(2)
-                    g2.fillRoundRect((width - w) / 2, (height - h) / 2, w, h, h, h)
-                } finally {
-                    g2.dispose()
+        splitter =
+            OnePixelSplitter(true, manualTopProportion.coerceIn(1f - COMPOSER_MAX_FRACTION, 0.95f)).apply {
+                firstComponent = cards
+                secondComponent = composerPane
+                setHonorComponentsMinimumSize(true)
+                // The user drags the divider to set the composer's resting size; remember it (and
+                // skip changes we triggered ourselves while auto-growing - see adjustingSplitter).
+                addPropertyChangeListener(Splitter.PROP_PROPORTION) {
+                    if (adjustingSplitter) return@addPropertyChangeListener
+                    manualTopProportion = proportion
+                    PropertiesComponent.getInstance().setValue(
+                        COMPOSER_PROPORTION_KEY,
+                        proportion,
+                        COMPOSER_DEFAULT_TOP_PROPORTION,
+                    )
                 }
+                // Auto-grow needs the real divider span, which only exists after the first layout
+                // and changes when the tool window is resized.
+                addComponentListener(
+                    object : java.awt.event.ComponentAdapter() {
+                        override fun componentResized(e: java.awt.event.ComponentEvent?) = adjustComposerHeight()
+                    },
+                )
             }
-        }
+        return splitter
+    }
 
     /**
-     * Applies a new composer height, clamped between [COMPOSER_MIN_HEIGHT] and a ceiling that always
-     * leaves [COMPOSER_TOP_RESERVE] for the conversation above, then persists it and relayouts.
+     * Auto-grows the composer to fit its content (chips up to half, plus the typed text), bounded
+     * below by the user's resting size (their last divider drag) and above by [COMPOSER_MAX_FRACTION]
+     * of the panel; past that the input scrolls. Runs on content changes, chip changes and resizes.
+     * A short-circuit on a tiny delta avoids fighting the divider and any feedback loop.
      */
-    private fun setComposerHeight(target: Int) {
-        val min = JBUI.scale(COMPOSER_MIN_HEIGHT)
-        val max = (height - JBUI.scale(COMPOSER_TOP_RESERVE)).coerceAtLeast(min)
-        composerHeight = target.coerceIn(min, max)
-        PropertiesComponent.getInstance().setValue(COMPOSER_HEIGHT_KEY, composerHeight, -1)
-        composerPane.revalidate()
-        rootPanel.revalidate()
-        rootPanel.repaint()
+    private fun adjustComposerHeight() {
+        if (!::splitter.isInitialized) return
+        val total = splitter.height
+        if (total <= 0) return
+
+        val baseComposerFraction = (1f - manualTopProportion).coerceIn(0f, COMPOSER_MAX_FRACTION)
+        val neededFraction = desiredComposerHeight().toFloat() / total
+        val composerFraction = neededFraction.coerceIn(baseComposerFraction, COMPOSER_MAX_FRACTION)
+
+        val topProportion = 1f - composerFraction
+        if (kotlin.math.abs(topProportion - splitter.proportion) < 0.005f) return
+        adjustingSplitter = true
+        try {
+            splitter.proportion = topProportion
+        } finally {
+            adjustingSplitter = false
+        }
+    }
+
+    /**
+     * Pixel height the composer would like: its chips (their natural height, capped at
+     * [CHIPS_MAX_HEIGHT]), the full typed text, the controls row and all the surrounding insets and
+     * gaps. Independent of the composer's current height, so [adjustComposerHeight] does not chase
+     * its own tail.
+     */
+    private fun desiredComposerHeight(): Int {
+        val chips = if (chipsScroll.isVisible) chipsRow.preferredSize.height.coerceAtMost(JBUI.scale(CHIPS_MAX_HEIGHT)) else 0
+        val input = composer.preferredSize.height
+        val controls = controlsRow.preferredSize.height
+        val vgaps = JBUI.scale(6) * 2 // the two vgaps of composerBox's BorderLayout(0, 6)
+        val boxInsets = JBUI.scale(10) + JBUI.scale(8) // composerBox border empty(10, 12, 8, 10)
+        val outerInsets = JBUI.scale(8) + JBUI.scale(12) // composer panel border empty(8, 12, 12, 12)
+        return chips + input + controls + vgaps + boxInsets + outerInsets
     }
 
     private fun buildChatCard(): JComponent =
@@ -563,11 +543,11 @@ class ChatToolWindowPanel(
 
         composer.document.addDocumentListener(
             object : DocumentListener {
-                override fun insertUpdate(e: DocumentEvent) = refreshSendState()
+                override fun insertUpdate(e: DocumentEvent) = onComposerChanged()
 
-                override fun removeUpdate(e: DocumentEvent) = refreshSendState()
+                override fun removeUpdate(e: DocumentEvent) = onComposerChanged()
 
-                override fun changedUpdate(e: DocumentEvent) = refreshSendState()
+                override fun changedUpdate(e: DocumentEvent) = onComposerChanged()
             },
         )
 
@@ -596,10 +576,23 @@ class ChatToolWindowPanel(
         controlsRow.add(attachButton)
         controlsRow.add(sendButton)
 
+        // Scroll the input rather than clip it: once the typed text outgrows the (auto-grown)
+        // composer the user can still scroll through it instead of losing track of earlier lines.
+        val inputScroll =
+            JBScrollPane(
+                composer,
+                ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED,
+                ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER,
+            ).apply {
+                border = JBUI.Borders.empty()
+                isOpaque = false
+                viewport.isOpaque = false
+            }
+
         composerBox.layout = BorderLayout(0, JBUI.scale(6))
         composerBox.border = JBUI.Borders.empty(10, 12, 8, 10)
         composerBox.add(chipsScroll, BorderLayout.NORTH)
-        composerBox.add(composer, BorderLayout.CENTER)
+        composerBox.add(inputScroll, BorderLayout.CENTER)
         composerBox.add(controlsRow, BorderLayout.SOUTH)
 
         return JPanel(BorderLayout()).apply {
@@ -613,10 +606,17 @@ class ChatToolWindowPanel(
         sendButton.isEnabled = composer.text.isNotBlank()
     }
 
+    /** Typed-text change: update the send button and let the composer auto-grow to fit the content. */
+    private fun onComposerChanged() {
+        refreshSendState()
+        adjustComposerHeight()
+    }
+
     /**
      * Sends the current composer content: appends the question, asks the controller for the
      * meta-prompt (which folds in the attached context) and appends the assistant reply. The
-     * attached context is kept after sending so the user can iterate. No-op when blank.
+     * attached context is then cleared so the next question starts from a clean slate. No-op
+     * when blank.
      */
     fun send() {
         val query = composer.text
@@ -639,6 +639,8 @@ class ChatToolWindowPanel(
         }
 
         composer.text = ""
+        // Clear the attached context so the next question starts fresh (the turn already captured it).
+        service.clear()
         // Sending from the sessions home creates the session, so reveal the conversation view.
         showChat()
         composer.requestFocusInWindow()
@@ -689,6 +691,7 @@ class ChatToolWindowPanel(
                 chipsScroll.revalidate()
                 composerBox.revalidate()
                 composerBox.repaint()
+                adjustComposerHeight()
             }
         }
     }
