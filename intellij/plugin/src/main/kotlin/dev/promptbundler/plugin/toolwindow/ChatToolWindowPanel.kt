@@ -3,6 +3,7 @@ package dev.promptbundler.plugin.toolwindow
 import com.intellij.icons.AllIcons
 import com.intellij.ide.dnd.DnDSupport
 import com.intellij.ide.dnd.FileCopyPasteUtil
+import com.intellij.ide.util.PropertiesComponent
 import com.intellij.ide.util.gotoByName.ChooseByNamePopup
 import com.intellij.ide.util.gotoByName.ChooseByNamePopupComponent
 import com.intellij.ide.util.gotoByName.DefaultChooseByNameItemProvider
@@ -29,6 +30,7 @@ import com.intellij.ui.components.TextComponentEmptyText
 import com.intellij.ui.components.panels.VerticalLayout
 import com.intellij.util.IconUtil
 import com.intellij.util.concurrency.AppExecutorUtil
+import com.intellij.util.text.DateFormatUtil
 import com.intellij.util.ui.EmptyIcon
 import com.intellij.util.ui.JBFont
 import com.intellij.util.ui.JBUI
@@ -38,8 +40,12 @@ import dev.promptbundler.plugin.context.Attachments
 import dev.promptbundler.plugin.context.CollectResult
 import dev.promptbundler.plugin.context.ContextBundleListener
 import dev.promptbundler.plugin.context.ContextBundleService
+import dev.promptbundler.plugin.session.PersistedSession
+import dev.promptbundler.plugin.session.SessionHistoryListener
+import dev.promptbundler.plugin.session.SessionHistoryService
 import java.awt.BasicStroke
 import java.awt.BorderLayout
+import java.awt.CardLayout
 import java.awt.Color
 import java.awt.Component
 import java.awt.Cursor
@@ -68,6 +74,7 @@ import javax.swing.JPanel
 import javax.swing.KeyStroke
 import javax.swing.ScrollPaneConstants
 import javax.swing.Scrollable
+import javax.swing.Timer
 import javax.swing.event.DocumentEvent
 import javax.swing.event.DocumentListener
 import javax.swing.text.JTextComponent
@@ -75,13 +82,43 @@ import javax.swing.text.JTextComponent
 private const val COMPOSER_PLACEHOLDER = "Ask your question for your web copilot agent and add context"
 
 // Header that opens the user request section of the assembled prompt. The collapsed reply
-// keeps everything from this line to the end visible (the request in full).
+// keeps the request text (the lines after this header) visible without the header itself.
 private const val REQUEST_MARKER = "### USER REQUEST"
 private const val ARC = 16
 
 // Tallest the chips area may get before it scrolls instead of growing the composer (~4 rows).
 private const val CHIPS_MAX_HEIGHT = 104
+
+// The input text area always keeps at least this much height: when the composer pane is short
+// (e.g. dragged small) and many files are attached, the chips yield so the user still sees what
+// they type instead of the chips swallowing the whole pane.
+private const val INPUT_MIN_HEIGHT = 44
+
+// Floor for the chips area so at least one row stays visible (and scrollable) even when squeezed.
+private const val CHIP_ROW_HEIGHT = 30
+
+// Composer pane vertical chrome: RoundedPanel insets (top 10 + bottom 8) plus the two 6px vgaps
+// between the chips, the input and the controls.
+private const val COMPOSER_CHROME_HEIGHT = 30
 private val ACCENT = JBColor.namedColor("Component.focusedBorderColor", JBColor(0x3574F0, 0x548AF7))
+
+// Card names for the two views (sessions list and the active conversation) and the title shown
+// for a fresh, not-yet-persisted session.
+private const val CARD_CHAT = "chat"
+private const val CARD_LIST = "list"
+private const val NEW_SESSION_TITLE = "New session"
+
+// Persisted composer height (scaled px) and its bounds. The composer is pinned to the bottom and
+// resized by dragging the grip above it; the conversation above takes whatever space is left.
+private const val COMPOSER_HEIGHT_KEY = "promptbundler.composer.height"
+private const val COMPOSER_DEFAULT_HEIGHT = 168
+private const val COMPOSER_MIN_HEIGHT = 96
+
+// Space kept for the conversation/list above the composer so dragging can never swallow the panel.
+private const val COMPOSER_TOP_RESERVE = 120
+
+// The drag grip strip sitting just above the composer; thin, with a centered handle and N-resize cursor.
+private const val GRIP_HEIGHT = 9
 
 /**
  * The chat panel hosted by the PromptBundler tool window: a scrollable conversation on top
@@ -99,6 +136,19 @@ class ChatToolWindowPanel(
 ) : SimpleToolWindowPanel(true, true),
     Disposable {
     private val service = ContextBundleService.getInstance(project)
+
+    // Lazy on purpose: the first access loads the persisted state, which touches the project store
+    // (and a path-macro contributor that may block). That first touch is forced off the EDT in
+    // init; afterwards every access is on an already-initialized service and is cheap.
+    private val sessionService by lazy { SessionHistoryService.getInstance(project) }
+
+    // Id of the session currently shown, or null for a fresh draft that is not persisted until
+    // its first turn is sent (so no empty sessions are ever stored).
+    private var currentSessionId: String? = null
+
+    private val cards = JPanel(CardLayout())
+    private val sessionList = JPanel(VerticalLayout(JBUI.scale(6)))
+    private val sessionTitleLabel = JBLabel(NEW_SESSION_TITLE)
     private val conversation = JPanel(VerticalLayout(JBUI.scale(14)))
     private val conversationScroll =
         JBScrollPane(
@@ -123,7 +173,22 @@ class ChatToolWindowPanel(
         ) {
             override fun getPreferredSize(): Dimension {
                 val size = super.getPreferredSize()
-                val cap = JBUI.scale(CHIPS_MAX_HEIGHT)
+                var cap = JBUI.scale(CHIPS_MAX_HEIGHT)
+
+                // When the composer pane is short, shrink the cap so the input keeps at least
+                // INPUT_MIN_HEIGHT visible: the chips scroll within whatever is left rather than
+                // pushing the text area off-screen. Never drop below one (scrollable) row.
+                val boxHeight = composerBox.height
+                if (boxHeight > 0) {
+                    val reserved =
+                        JBUI.scale(COMPOSER_CHROME_HEIGHT) +
+                            controlsRow.preferredSize.height +
+                            JBUI.scale(INPUT_MIN_HEIGHT)
+                    val available = boxHeight - reserved
+                    if (available < cap) cap = available
+                }
+                cap = cap.coerceAtLeast(JBUI.scale(CHIP_ROW_HEIGHT))
+
                 if (size.height > cap) size.height = cap
                 return size
             }
@@ -136,6 +201,22 @@ class ChatToolWindowPanel(
     // resolved once) so it re-resolves when the user switches light <-> dark at runtime.
     private val composerBox = RoundedPanel(JBColor(0xF2F3F5, 0x393B40))
 
+    // The attach + send buttons row, kept as a field so the chips cap can reserve room for it
+    // (and for the input) when sizing itself.
+    private val controlsRow = JPanel(FlowLayout(FlowLayout.RIGHT, JBUI.scale(6), 0))
+
+    // Current composer height (scaled px), restored from the last session and updated as the user
+    // drags the grip. The conversation above simply takes whatever vertical space is left over.
+    private var composerHeight =
+        PropertiesComponent.getInstance().getInt(COMPOSER_HEIGHT_KEY, JBUI.scale(COMPOSER_DEFAULT_HEIGHT))
+
+    // The bottom pane holding the grip + composer; its preferred height is [composerHeight], which is
+    // what BorderLayout.SOUTH honors. Kept as a field so a drag can revalidate it directly.
+    private lateinit var composerPane: JPanel
+
+    // The BorderLayout root (cards in CENTER, composerPane in SOUTH); revalidated after a resize.
+    private lateinit var rootPanel: JPanel
+
     init {
         conversation.isOpaque = false
         conversation.border = JBUI.Borders.empty(12, 12, 4, 12)
@@ -143,15 +224,305 @@ class ChatToolWindowPanel(
         conversationScroll.viewport.isOpaque = false
         conversationScroll.isOpaque = false
 
-        val root = JPanel(BorderLayout())
-        root.add(conversationScroll, BorderLayout.CENTER)
-        root.add(buildComposer(), BorderLayout.SOUTH)
-        setContent(root)
+        setContent(buildRoot())
 
-        project.messageBus
-            .connect(this)
-            .subscribe(ContextBundleService.TOPIC, ContextBundleListener { rebuildChips() })
+        val connection = project.messageBus.connect(this)
+        connection.subscribe(ContextBundleService.TOPIC, ContextBundleListener { rebuildChips() })
+        connection.subscribe(SessionHistoryService.TOPIC, SessionHistoryListener { rebuildSessionList() })
+
         rebuildChips()
+
+        // The sessions list is the home view: land there, with the composer ready to start a
+        // brand new session on send (currentSessionId stays null until the first turn is sent).
+        currentSessionId = null
+        sessionTitleLabel.text = NEW_SESSION_TITLE
+        (cards.layout as CardLayout).show(cards, CARD_LIST)
+
+        // Warm the session service off the EDT: its first access loads the persisted state, which
+        // touches the project store and may block (e.g. a Maven path-macro contributor). Once
+        // warmed, populate the list back on the EDT.
+        AppExecutorUtil.getAppExecutorService().execute {
+            sessionService // first touch off EDT triggers state load
+            invokeLater { rebuildSessionList() }
+        }
+    }
+
+    // --- Views ---------------------------------------------------------------------------
+
+    /**
+     * Root layout: the two views (sessions list and conversation) fill the center, the single
+     * shared composer is pinned to the bottom. The composer is shared so it is present on both
+     * views (on the sessions home it starts a new session). Its height is user-controlled by the
+     * grip above it (see [buildComposerPane]); the center takes whatever space is left.
+     */
+    private fun buildRoot(): JComponent {
+        cards.add(buildChatCard(), CARD_CHAT)
+        cards.add(buildListCard(), CARD_LIST)
+        rootPanel =
+            JPanel(BorderLayout()).apply {
+                add(cards, BorderLayout.CENTER)
+                add(buildComposerPane(), BorderLayout.SOUTH)
+            }
+        return rootPanel
+    }
+
+    /**
+     * The bottom pane: a thin drag grip stacked over the composer. Pinned in the root's SOUTH,
+     * so BorderLayout sizes it to its preferred height - which we override to [composerHeight] -
+     * and the conversation above takes the rest. Dragging the grip drives [setComposerHeight].
+     */
+    private fun buildComposerPane(): JComponent {
+        composerPane =
+            object : JPanel(BorderLayout()) {
+                override fun getPreferredSize(): Dimension = super.getPreferredSize().also { it.height = composerHeight }
+
+                override fun getMinimumSize(): Dimension = super.getMinimumSize().also { it.height = JBUI.scale(COMPOSER_MIN_HEIGHT) }
+            }
+        return composerPane.apply {
+            isOpaque = false
+            add(buildComposerGrip(), BorderLayout.NORTH)
+            add(buildComposer(), BorderLayout.CENTER)
+        }
+    }
+
+    /**
+     * A slim strip above the composer that resizes it: dragging up grows the composer, down shrinks
+     * it. Paints a short centered handle and shows a vertical-resize cursor so the affordance reads
+     * at a glance. Tracks the pointer in screen coordinates, which stay stable while the strip itself
+     * moves as the pane is resized mid-drag.
+     */
+    private fun buildComposerGrip(): JComponent =
+        object : JPanel() {
+            init {
+                isOpaque = false
+                cursor = Cursor.getPredefinedCursor(Cursor.N_RESIZE_CURSOR)
+                preferredSize = Dimension(0, JBUI.scale(GRIP_HEIGHT))
+                val drag =
+                    object : MouseAdapter() {
+                        private var startScreenY = 0
+                        private var startHeight = 0
+
+                        override fun mousePressed(e: MouseEvent) {
+                            startScreenY = e.yOnScreen
+                            startHeight = composerHeight
+                        }
+
+                        override fun mouseDragged(e: MouseEvent) {
+                            setComposerHeight(startHeight + (startScreenY - e.yOnScreen))
+                        }
+                    }
+                addMouseListener(drag)
+                addMouseMotionListener(drag)
+            }
+
+            override fun paintComponent(g: Graphics) {
+                super.paintComponent(g)
+                val g2 = g.create() as Graphics2D
+                try {
+                    g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
+                    g2.color = JBColor.border()
+                    val w = JBUI.scale(28)
+                    val h = JBUI.scale(2)
+                    g2.fillRoundRect((width - w) / 2, (height - h) / 2, w, h, h, h)
+                } finally {
+                    g2.dispose()
+                }
+            }
+        }
+
+    /**
+     * Applies a new composer height, clamped between [COMPOSER_MIN_HEIGHT] and a ceiling that always
+     * leaves [COMPOSER_TOP_RESERVE] for the conversation above, then persists it and relayouts.
+     */
+    private fun setComposerHeight(target: Int) {
+        val min = JBUI.scale(COMPOSER_MIN_HEIGHT)
+        val max = (height - JBUI.scale(COMPOSER_TOP_RESERVE)).coerceAtLeast(min)
+        composerHeight = target.coerceIn(min, max)
+        PropertiesComponent.getInstance().setValue(COMPOSER_HEIGHT_KEY, composerHeight, -1)
+        composerPane.revalidate()
+        rootPanel.revalidate()
+        rootPanel.repaint()
+    }
+
+    private fun buildChatCard(): JComponent =
+        JPanel(BorderLayout()).apply {
+            add(chatTopBar(), BorderLayout.NORTH)
+            add(conversationScroll, BorderLayout.CENTER)
+        }
+
+    /** Top bar of the conversation: a back arrow to the sessions list, the title, and a new-session +. */
+    private fun chatTopBar(): JComponent {
+        sessionTitleLabel.font = JBFont.label().asBold()
+
+        val left =
+            JPanel(FlowLayout(FlowLayout.LEFT, JBUI.scale(4), 0)).apply {
+                isOpaque = false
+                add(IconActionButton(AllIcons.Actions.Back, "Back to sessions") { showList() })
+                add(sessionTitleLabel)
+            }
+        val right =
+            JPanel(FlowLayout(FlowLayout.RIGHT, JBUI.scale(2), 0)).apply {
+                isOpaque = false
+                add(IconActionButton(AllIcons.General.Add, "New session") { newSession() })
+            }
+        return JPanel(BorderLayout()).apply {
+            isOpaque = false
+            border = JBUI.Borders.empty(6, 8, 0, 8)
+            add(left, BorderLayout.WEST)
+            add(right, BorderLayout.EAST)
+        }
+    }
+
+    private fun buildListCard(): JComponent {
+        sessionList.isOpaque = false
+        sessionList.border = JBUI.Borders.empty(8)
+
+        val scroll =
+            JBScrollPane(
+                JPanel(BorderLayout()).apply {
+                    isOpaque = false
+                    add(sessionList, BorderLayout.NORTH)
+                },
+                ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED,
+                ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER,
+            ).apply {
+                border = JBUI.Borders.empty()
+                isOpaque = false
+                viewport.isOpaque = false
+            }
+
+        val top =
+            JPanel(BorderLayout()).apply {
+                isOpaque = false
+                border = JBUI.Borders.empty(6, 8, 0, 8)
+                add(
+                    JPanel(FlowLayout(FlowLayout.LEFT, JBUI.scale(4), 0)).apply {
+                        isOpaque = false
+                        add(JBLabel("Sessions").apply { font = JBFont.label().asBold() })
+                    },
+                    BorderLayout.WEST,
+                )
+                add(
+                    JPanel(FlowLayout(FlowLayout.RIGHT, JBUI.scale(2), 0)).apply {
+                        isOpaque = false
+                        add(IconActionButton(AllIcons.General.Add, "New session") { newSession() })
+                    },
+                    BorderLayout.EAST,
+                )
+            }
+
+        return JPanel(BorderLayout()).apply {
+            add(top, BorderLayout.NORTH)
+            add(scroll, BorderLayout.CENTER)
+        }
+    }
+
+    private fun showChat() {
+        (cards.layout as CardLayout).show(cards, CARD_CHAT)
+    }
+
+    private fun showList() {
+        rebuildSessionList()
+        (cards.layout as CardLayout).show(cards, CARD_LIST)
+    }
+
+    // --- Sessions ------------------------------------------------------------------------
+
+    /** Clears the view to a fresh draft session; it is persisted only once a turn is sent. */
+    private fun newSession() {
+        currentSessionId = null
+        sessionTitleLabel.text = NEW_SESSION_TITLE
+        clearConversation()
+        showChat()
+        composer.requestFocusInWindow()
+    }
+
+    private fun openSession(id: String) {
+        val session = sessionService.session(id) ?: return
+        currentSessionId = id
+        sessionTitleLabel.text = session.title
+        clearConversation()
+        session.turns.forEach { turn ->
+            conversation.add(userRow(turn.userRequest))
+            conversation.add(assistantRow(turn.metaPrompt))
+        }
+        conversation.revalidate()
+        conversation.repaint()
+        invokeLater { conversationScroll.verticalScrollBar.value = 0 }
+        showChat()
+    }
+
+    private fun deleteSession(id: String) {
+        val wasCurrent = id == currentSessionId
+        sessionService.deleteSession(id)
+        if (wasCurrent) {
+            currentSessionId = null
+            sessionTitleLabel.text = NEW_SESSION_TITLE
+            clearConversation()
+        }
+    }
+
+    private fun clearConversation() {
+        conversation.removeAll()
+        conversation.revalidate()
+        conversation.repaint()
+    }
+
+    private fun rebuildSessionList() {
+        invokeLater {
+            sessionList.removeAll()
+            val sessions = sessionService.sessions()
+            if (sessions.isEmpty()) {
+                sessionList.add(
+                    JBLabel("No sessions yet").apply {
+                        foreground = JBColor.namedColor("Label.infoForeground", JBColor.GRAY)
+                        border = JBUI.Borders.empty(8, 4)
+                    },
+                )
+            } else {
+                sessions.forEach { sessionList.add(sessionRow(it)) }
+            }
+            sessionList.revalidate()
+            sessionList.repaint()
+        }
+    }
+
+    /** One row of the sessions list: title over a relative timestamp, with a delete action. */
+    private fun sessionRow(session: PersistedSession): JComponent {
+        val texts =
+            JPanel(VerticalLayout(JBUI.scale(2))).apply {
+                isOpaque = false
+                add(JBLabel(session.title).apply { font = JBFont.label() })
+                add(
+                    JBLabel(DateFormatUtil.formatPrettyDateTime(session.updatedAt)).apply {
+                        foreground = JBColor.namedColor("Label.infoForeground", JBColor.GRAY)
+                        font = JBFont.small()
+                    },
+                )
+            }
+
+        val row =
+            RoundedPanel(JBColor(0xF2F3F5, 0x3C3F41), borderColor = null).apply {
+                layout = BorderLayout(JBUI.scale(8), 0)
+                border = JBUI.Borders.empty(8, 10)
+                cursor = Cursor.getPredefinedCursor(Cursor.HAND_CURSOR)
+                add(texts, BorderLayout.CENTER)
+                add(
+                    IconActionButton(AllIcons.General.Remove, "Delete session") { deleteSession(session.id) },
+                    BorderLayout.EAST,
+                )
+            }
+
+        val open =
+            object : MouseAdapter() {
+                override fun mouseClicked(e: MouseEvent) {
+                    if (e.button == MouseEvent.BUTTON1) openSession(session.id)
+                }
+            }
+        // Labels swallow clicks, so the whole row opens only if every child also forwards.
+        listOf(row, texts).forEach { it.addMouseListener(open) }
+        texts.components.forEach { it.addMouseListener(open) }
+        return row
     }
 
     private fun buildComposer(): JComponent {
@@ -216,18 +587,15 @@ class ChatToolWindowPanel(
         chipsScroll.border = JBUI.Borders.empty()
         chipsScroll.isVisible = false
 
-        val controls =
-            JPanel(FlowLayout(FlowLayout.RIGHT, JBUI.scale(6), 0)).apply {
-                isOpaque = false
-                add(attachButton)
-                add(sendButton)
-            }
+        controlsRow.isOpaque = false
+        controlsRow.add(attachButton)
+        controlsRow.add(sendButton)
 
         composerBox.layout = BorderLayout(0, JBUI.scale(6))
         composerBox.border = JBUI.Borders.empty(10, 12, 8, 10)
         composerBox.add(chipsScroll, BorderLayout.NORTH)
         composerBox.add(composer, BorderLayout.CENTER)
-        composerBox.add(controls, BorderLayout.SOUTH)
+        composerBox.add(controlsRow, BorderLayout.SOUTH)
 
         return JPanel(BorderLayout()).apply {
             isOpaque = false
@@ -249,21 +617,47 @@ class ChatToolWindowPanel(
         val query = composer.text
         if (query.isBlank()) return
 
-        addRow(userRow(query))
+        val userComponent = userRow(query)
+        addRow(userComponent)
         val metaPrompt = controller.buildMetaPrompt(query)
         addRow(assistantRow(metaPrompt))
 
+        // Persist the turn. The first turn of a draft materializes the session (and its title);
+        // later turns extend the open one.
+        val id = currentSessionId
+        if (id == null) {
+            val created = sessionService.createSession(query, metaPrompt)
+            currentSessionId = created.id
+            sessionTitleLabel.text = created.title
+        } else {
+            sessionService.appendTurn(id, query, metaPrompt)
+        }
+
         composer.text = ""
+        // Sending from the sessions home creates the session, so reveal the conversation view.
+        showChat()
         composer.requestFocusInWindow()
+        scrollRowToTop(userComponent)
     }
 
     private fun addRow(row: JComponent) {
         conversation.add(row)
         conversation.revalidate()
         conversation.repaint()
+    }
+
+    /**
+     * Pins the top of [row] to the top of the conversation viewport. On send this puts the freshly
+     * sent question at the top of the panel with the assistant header (and its Copy action) right
+     * below it, instead of jumping to the very bottom of a tall reply, which previously left the
+     * Copy button out of view and sometimes landed mid-response. Clamps to the maximum scroll
+     * offset so a short reply still shows the whole exchange.
+     */
+    private fun scrollRowToTop(row: JComponent) {
         invokeLater {
             val bar = conversationScroll.verticalScrollBar
-            bar.value = bar.maximum
+            val maxValue = (conversation.height - conversationScroll.viewport.height).coerceAtLeast(0)
+            bar.value = row.y.coerceIn(0, maxValue)
         }
     }
 
@@ -280,6 +674,17 @@ class ChatToolWindowPanel(
             chipsRow.repaint()
             chipsScroll.revalidate()
             chipsScroll.repaint()
+
+            // Chip wrapping needs the row's real width, which is only assigned by the first layout
+            // pass. On the very first drop that width is still 0, so WrapLayout reports a single
+            // (clipped) line and the capped scroll area collapses to one row. Recompute once the
+            // width is known so many files wrap to several rows and then scroll, every time.
+            invokeLater {
+                chipsRow.revalidate()
+                chipsScroll.revalidate()
+                composerBox.revalidate()
+                composerBox.repaint()
+            }
         }
     }
 
@@ -428,21 +833,22 @@ class ChatToolWindowPanel(
     }
 
     /**
-     * Assistant reply: full width, role header with an expand toggle and a Copy action, then the
-     * meta-prompt. The body is collapsed by default (see [collapsedPreview]) so the eye lands on
-     * the intro, a sample file block and the request in full; the chevron unfolds the whole prompt.
+     * Assistant reply: full width, role header with a collapse toggle and a Copy action, then the
+     * meta-prompt. The body is expanded by default so a developer sees exactly what will be copied
+     * at a glance (anything less reads as hiding what you send); the chevron folds it into a short
+     * three-beat preview (see [collapsedPreview]).
      */
     private fun assistantRow(metaPrompt: String): JComponent {
         val collapsed = collapsedPreview(metaPrompt)
-        val body = bodyArea(collapsed, JBColor.foreground())
+        val body = bodyArea(metaPrompt, JBColor.foreground())
 
         val toggle =
-            JLabel(AllIcons.General.ChevronDown).apply {
-                toolTipText = "Expand all"
+            JLabel(AllIcons.General.ChevronUp).apply {
+                toolTipText = "Collapse"
                 cursor = Cursor.getPredefinedCursor(Cursor.HAND_CURSOR)
                 border = JBUI.Borders.empty(2)
             }
-        var expanded = false
+        var expanded = true
         toggle.addMouseListener(
             object : MouseAdapter() {
                 override fun mouseClicked(e: MouseEvent) {
@@ -470,12 +876,7 @@ class ChatToolWindowPanel(
             JPanel(FlowLayout(FlowLayout.RIGHT, JBUI.scale(4), 0)).apply {
                 isOpaque = false
                 add(toggle)
-                add(
-                    JButton("Copy").apply {
-                        isOpaque = false
-                        addActionListener { controller.copyToClipboard(metaPrompt) }
-                    },
-                )
+                add(CopyButton { controller.copyToClipboard(metaPrompt) })
             },
             BorderLayout.EAST,
         )
@@ -524,9 +925,9 @@ class ChatToolWindowPanel(
     /**
      * Folds the assembled prompt into a three-beat preview: the opening instruction line, an
      * ellipsis, the first injected `<file>` header (trimmed), another ellipsis, then the user
-     * request section in full. Mirrors the prompt's begin / middle / end shape without making
-     * the reader scroll through the whole context. Falls back gracefully when a beat is absent
-     * (for example no files attached).
+     * request text (the lines after the marker, without the header itself). Mirrors the prompt's
+     * begin / middle / end shape without making the reader scroll through the whole context. Falls
+     * back gracefully when a beat is absent (for example no files attached).
      */
     private fun collapsedPreview(metaPrompt: String): String {
         val lines = metaPrompt.lines()
@@ -544,9 +945,9 @@ class ChatToolWindowPanel(
         // "### USER REQUEST" in its content, and the real request section is always the prompt's
         // trailing block. Matching the first marker would fold the preview from inside a file.
         val requestIndex = lines.indexOfLast { it.trim() == REQUEST_MARKER }
-        if (requestIndex >= 0) {
+        if (requestIndex in 0 until lines.lastIndex) {
             builder.append('\n')
-            builder.append(lines.subList(requestIndex, lines.size).joinToString("\n"))
+            builder.append(lines.subList(requestIndex + 1, lines.size).joinToString("\n"))
         }
         return builder.toString()
     }
@@ -695,6 +1096,73 @@ private class SendButton(
         } finally {
             g2.dispose()
         }
+    }
+}
+
+/**
+ * The reply's Copy action. On click it copies, flips to "Copied" in a confirmation green, holds
+ * briefly, then fades that green back to the normal label color and restores the label, so the
+ * user gets an unmistakable yet quiet acknowledgement of what just landed on the clipboard.
+ *
+ * Both timers run on the EDT (javax.swing.Timer), so the text and color mutations are safe. A
+ * fresh click restarts the cycle: any in-flight timers are stopped first.
+ */
+private class CopyButton(
+    private val onCopy: () -> Unit,
+) : JButton("Copy") {
+    private val doneColor = JBColor(0x1A7F37, 0x57A65A)
+    private var holdTimer: Timer? = null
+    private var fadeTimer: Timer? = null
+
+    init {
+        isOpaque = false
+        addActionListener { trigger() }
+    }
+
+    private fun trigger() {
+        onCopy()
+        holdTimer?.stop()
+        fadeTimer?.stop()
+        text = "Copied ✓"
+        foreground = doneColor
+        holdTimer =
+            Timer(HOLD_MS) { startFade() }.apply {
+                isRepeats = false
+                start()
+            }
+    }
+
+    private fun startFade() {
+        var step = 0
+        fadeTimer =
+            Timer(FADE_TICK_MS) {
+                step++
+                val t = (step.toFloat() / FADE_STEPS).coerceAtMost(1f)
+                foreground = blend(doneColor, JBColor.foreground(), t)
+                if (step >= FADE_STEPS) {
+                    fadeTimer?.stop()
+                    text = "Copy"
+                    // Restore the theme-reactive default so it re-resolves on a light/dark switch.
+                    foreground = JBColor.foreground()
+                }
+            }.apply { start() }
+    }
+
+    private fun blend(
+        from: Color,
+        to: Color,
+        t: Float,
+    ): Color =
+        Color(
+            (from.red + (to.red - from.red) * t).toInt(),
+            (from.green + (to.green - from.green) * t).toInt(),
+            (from.blue + (to.blue - from.blue) * t).toInt(),
+        )
+
+    private companion object {
+        const val HOLD_MS = 900
+        const val FADE_TICK_MS = 16
+        const val FADE_STEPS = 24
     }
 }
 

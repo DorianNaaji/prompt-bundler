@@ -4,16 +4,43 @@
     <vendor url="https://github.com/promptbundler/promptbundler">Prompt Bundler</vendor>
 
     <description><![CDATA[
-        <b>Prompt Bundler</b> turns your codebase into focused, copy-ready prompts, without leaving the IDE.
+        <b>PromptBundler</b><br/>
+        <em>Get your codebase into any AI chat, without the copy-paste hell.</em>
         <br/><br/>
-        Attach files, whole folders, or a selected snippet from the editor, then ask your question in the
-        tool window. Prompt Bundler assembles a single, well-structured prompt (a file tree plus the exact
-        file contents) that you can copy into any AI assistant or web chat.
+        Pasting code into a web chat usually means hunting files, copying them one by one, and losing the
+        project structure that makes an answer good. <b>PromptBundler</b> fixes that: pick your files, get one
+        clean, structured prompt, and paste it wherever you want.
+        <br/><br/>
+        <b>🚀 What it does</b><br/>
+        Attach files, whole folders, or a selected snippet, then ask your question in the tool window.
+        PromptBundler assembles a single, well-structured prompt ready on your clipboard.
         <ul>
-            <li>Attach context from the Project view, the editor selection, drag and drop, or a quick picker.</li>
-            <li>Binary and oversized files are skipped automatically.</li>
-            <li>Everything stays local: nothing is sent anywhere, you stay in control of the copy.</li>
+            <li><b>Seamless Context Gathering:</b> Attach files via the Project view, editor selection,
+                drag-and-drop, or a quick picker.</li>
+            <li><b>Structured Output:</b> Generates a prompt containing a clean file tree and the exact file
+                contents.</li>
+            <li><b>Universal Compatibility:</b> Works instantly with ChatGPT, Claude, Gemini, Mistral,
+                Microsoft 365 Copilot, or any text-based LLM.</li>
+            <li><b>Smart Filtering:</b> Binary and oversized files are skipped automatically.</li>
+            <li><b>Consistent &amp; Traceable:</b> Reuses templates for uniformity and keeps a history of past
+                prompts.</li>
         </ul>
+        <b>🔒 Private by design</b><br/>
+        No API calls, no accounts, no network. PromptBundler strictly reads selected files and writes plain
+        text to your clipboard. Your code never leaves your machine until you paste it into the chat you or
+        your company approves.
+        <br/><br/>
+        <b>💡 Why bother?</b><br/>
+        IDE AI agents are capped and getting pricier. Send large context questions to the web subscriptions
+        your company already pays for, and save your limited IDE agent credits for the work that truly needs
+        them.
+        <br/><br/>
+        <b>❤️ Support the project</b><br/>
+        PromptBundler is completely free, open-source, and runs entirely offline. If it saves you from
+        copy-paste hell, you can support the development here:
+        <br/>
+        <a href="https://github.com/sponsors/DorianNaaji">Sponsor on GitHub</a> &nbsp;
+        <a href="https://buymeacoffee.com/dorian.naaji">Buy Me a Coffee</a>
     ]]></description>
 
     <depends>com.intellij.modules.platform</depends>
