@@ -1,4 +1,4 @@
-# PromptBundler
+# Prompt Bundler
 
 > Get your codebase into any AI chat, without the copy-paste hell.
 
