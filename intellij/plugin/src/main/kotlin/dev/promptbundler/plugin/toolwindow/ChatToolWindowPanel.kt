@@ -1,6 +1,7 @@
 package dev.promptbundler.plugin.toolwindow
 
 import com.intellij.icons.AllIcons
+import com.intellij.ide.BrowserUtil
 import com.intellij.ide.dnd.DnDSupport
 import com.intellij.ide.dnd.FileCopyPasteUtil
 import com.intellij.ide.util.PropertiesComponent
@@ -15,6 +16,7 @@ import com.intellij.openapi.application.invokeLater
 import com.intellij.openapi.fileEditor.impl.EditorHistoryManager
 import com.intellij.openapi.fileTypes.FileTypeManager
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.ui.Messages
 import com.intellij.openapi.ui.SimpleToolWindowPanel
 import com.intellij.openapi.ui.Splitter
 import com.intellij.openapi.ui.popup.JBPopupFactory
@@ -45,6 +47,9 @@ import dev.promptbundler.plugin.context.ContextBundleService
 import dev.promptbundler.plugin.session.PersistedSession
 import dev.promptbundler.plugin.session.SessionHistoryListener
 import dev.promptbundler.plugin.session.SessionHistoryService
+import dev.promptbundler.plugin.support.DonationReminder
+import dev.promptbundler.plugin.support.PromptBundlerIcons
+import dev.promptbundler.plugin.support.PropertiesDonationStore
 import java.awt.BasicStroke
 import java.awt.BorderLayout
 import java.awt.CardLayout
@@ -81,7 +86,8 @@ import javax.swing.event.DocumentEvent
 import javax.swing.event.DocumentListener
 import javax.swing.text.JTextComponent
 
-private const val COMPOSER_PLACEHOLDER = "Ask your question for your web copilot agent and add context"
+private const val COMPOSER_PLACEHOLDER =
+    "Write your prompt and add context (files, snippets, console outputs...) for your web agent"
 
 // Header that opens the user request section of the assembled prompt. The collapsed reply
 // keeps the request text (the lines after this header) visible without the header itself.
@@ -138,6 +144,8 @@ class ChatToolWindowPanel(
     // (and a path-macro contributor that may block). That first touch is forced off the EDT in
     // init; afterwards every access is on an already-initialized service and is cheap.
     private val sessionService by lazy { SessionHistoryService.getInstance(project) }
+
+    private val donationReminder = DonationReminder(PropertiesDonationStore())
 
     // Id of the session currently shown, or null for a fresh draft that is not persisted until
     // its first turn is sent (so no empty sessions are ever stored).
@@ -348,6 +356,10 @@ class ChatToolWindowPanel(
         val right =
             JPanel(FlowLayout(FlowLayout.RIGHT, JBUI.scale(2), 0)).apply {
                 isOpaque = false
+                add(donateButton())
+                add(Box.createHorizontalStrut(JBUI.scale(4)))
+                add(helpButton())
+                add(Box.createHorizontalStrut(JBUI.scale(6)))
                 add(IconActionButton(AllIcons.General.Add, "New session") { newSession() })
             }
         return JPanel(BorderLayout()).apply {
@@ -390,6 +402,9 @@ class ChatToolWindowPanel(
                 add(
                     JPanel(FlowLayout(FlowLayout.RIGHT, JBUI.scale(2), 0)).apply {
                         isOpaque = false
+                        add(donateButton())
+                        add(helpButton())
+                        add(Box.createHorizontalStrut(JBUI.scale(6)))
                         add(IconActionButton(AllIcons.General.Add, "New session") { newSession() })
                     },
                     BorderLayout.EAST,
@@ -645,6 +660,32 @@ class ChatToolWindowPanel(
         showChat()
         composer.requestFocusInWindow()
         scrollRowToTop(userComponent)
+
+        if (donationReminder.onPromptSent()) showDonationDialog()
+    }
+
+    private fun showDonationDialog() {
+        // "Yes" sits first so it is the default-focused option; the returned index maps back here.
+        val options = arrayOf("Yes ❤", "Maybe Later", "Don't remind me")
+        val choice =
+            Messages.showDialog(
+                project,
+                "Support the project and buy me a coffee.",
+                "Do you like Prompt Bundler?",
+                options,
+                0,
+                Messages.getQuestionIcon(),
+            )
+        when (choice) {
+            0 -> {
+                donationReminder.onYes()
+                BrowserUtil.browse(DonationReminder.DONATION_URL)
+            }
+            1 -> donationReminder.onMaybeLater()
+            2 -> donationReminder.onDontRemind()
+            // Closing the dialog (Esc) returns -1: treat it as "Maybe Later", re-ask later.
+            else -> donationReminder.onMaybeLater()
+        }
     }
 
     private fun addRow(row: JComponent) {
@@ -669,6 +710,55 @@ class ChatToolWindowPanel(
     }
 
     // --- Attached context ---------------------------------------------------------------
+
+    /**
+     * An always-visible (i) affordance in the top bars. Clicking it opens a small popup that spells
+     * out every way to attach context, since most paths (editor/project/console right-click) live
+     * outside this tool window and are easy to miss. Anchored on the button itself.
+     */
+    private fun donateButton(): JComponent =
+        IconActionButton(PromptBundlerIcons.Donate, "Support Prompt Bundler - buy me a coffee") {
+            BrowserUtil.browse(DonationReminder.DONATION_URL)
+        }
+
+    private fun helpButton(): JComponent {
+        val anchor = arrayOfNulls<JComponent>(1)
+        val button =
+            IconActionButton(AllIcons.General.Information, "How to attach context") {
+                anchor[0]?.let { showAttachHelp(it) }
+            }
+        anchor[0] = button
+        return button
+    }
+
+    private fun showAttachHelp(anchor: JComponent) {
+        val html =
+            """
+            <html><body style='width:300px;'>
+            <b>Attach context, 4 ways</b>
+            <ul style='margin:4px 0 0 14px; padding:0;'>
+            <li><b>Editor</b>: select code or text, right-click, <i>Add to Prompt Bundler Context</i>.</li>
+            <li><b>Project view</b>: right-click file(s) or whole folder(s), <i>Add to Prompt Bundler Context</i>.</li>
+            <li><b>Console</b>: right-click a run/console output, <i>Add Console Output to Prompt Bundler</i>.</li>
+            <li><b>Drag and drop</b>: drop files or whole folders straight onto the composer.</li>
+            <li><b>Picker</b>: use <b>+</b> in the composer to pick a recent file or search by name.</li>
+            </ul>
+            </body></html>
+            """.trimIndent()
+        val content =
+            JBLabel(html).apply {
+                border = JBUI.Borders.empty(10, 12)
+                font = JBFont.label()
+            }
+        JBPopupFactory
+            .getInstance()
+            .createComponentPopupBuilder(content, content)
+            .setRequestFocus(true)
+            .setResizable(false)
+            .setMovable(false)
+            .createPopup()
+            .showUnderneathOf(anchor)
+    }
 
     private fun rebuildChips() {
         invokeLater {
@@ -700,11 +790,13 @@ class ChatToolWindowPanel(
         val chip = RoundedPanel(JBColor(0xE0E2E6, 0x4E5157), borderColor = null)
         chip.layout = FlowLayout(FlowLayout.LEFT, JBUI.scale(4), 0)
         chip.border = JBUI.Borders.empty(2, 6, 2, 4)
+        val path = attachment.item.relativePath
         val label =
             JBLabel(attachment.label).apply {
-                icon = fileIconFor(attachment.item.relativePath)
+                // Path-less snippets (console output) read like an editor tab with a console icon.
+                icon = path?.let { fileIconFor(it) } ?: AllIcons.Debugger.Console
                 iconTextGap = JBUI.scale(4)
-                toolTipText = attachment.item.relativePath
+                toolTipText = path ?: attachment.label
                 font = JBFont.label()
             }
 
