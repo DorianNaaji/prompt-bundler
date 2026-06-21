@@ -41,10 +41,6 @@ Your IDE's AI agent is capped, and getting pricier. The chat in a subscription y
 company already pays for often isn't. Send the big context questions there, and keep your
 limited agent credits for the work that truly needs them.
 
-## Status
-
-Early. Built module by module, no release yet. Star it to follow along.
-
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md).
