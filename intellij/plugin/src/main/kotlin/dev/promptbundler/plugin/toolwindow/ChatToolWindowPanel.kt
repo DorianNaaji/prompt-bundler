@@ -32,12 +32,12 @@ import com.intellij.ui.components.JBScrollPane
 import com.intellij.ui.components.JBTextArea
 import com.intellij.ui.components.TextComponentEmptyText
 import com.intellij.ui.components.panels.VerticalLayout
+import com.intellij.ui.scale.JBUIScale
 import com.intellij.util.IconUtil
 import com.intellij.util.concurrency.AppExecutorUtil
 import com.intellij.util.text.DateFormatUtil
 import com.intellij.util.ui.EmptyIcon
 import com.intellij.util.ui.JBFont
-import com.intellij.ui.scale.JBUIScale
 import com.intellij.util.ui.JBUI
 import dev.promptbundler.plugin.context.Attachment
 import dev.promptbundler.plugin.context.AttachmentNotifications
