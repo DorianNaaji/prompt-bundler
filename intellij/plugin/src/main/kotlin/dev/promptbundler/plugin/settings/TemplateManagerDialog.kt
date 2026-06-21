@@ -14,14 +14,22 @@ import java.awt.BorderLayout
 import java.awt.Dimension
 import java.awt.FlowLayout
 import java.util.UUID
-import javax.swing.*
+import javax.swing.DefaultListCellRenderer
+import javax.swing.DefaultListModel
+import javax.swing.JButton
+import javax.swing.JComponent
+import javax.swing.JList
+import javax.swing.JPanel
+import javax.swing.JSplitPane
+import javax.swing.ListSelectionModel
 import javax.swing.event.DocumentEvent
 import javax.swing.event.DocumentListener
 
 private const val DEFAULT_ID = "__default__"
 
-class TemplateManagerDialog(project: Project) : DialogWrapper(project) {
-
+class TemplateManagerDialog(
+    project: Project,
+) : DialogWrapper(project) {
     private val listModel = DefaultListModel<PromptTemplate>()
     private val templateList = JBList(listModel)
     private val nameField = JBTextField()
@@ -41,34 +49,47 @@ class TemplateManagerDialog(project: Project) : DialogWrapper(project) {
         listModel.addElement(PromptTemplate(DEFAULT_ID, "Default", DefaultTemplate.text))
         TemplateStore.templates.forEach { listModel.addElement(it) }
 
-        templateList.cellRenderer = object : DefaultListCellRenderer() {
-            override fun getListCellRendererComponent(
-                list: JList<*>, value: Any?, index: Int, isSelected: Boolean, cellHasFocus: Boolean
-            ): java.awt.Component {
-                super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus)
-                val t = value as? PromptTemplate
-                val isActive = if (t?.id == DEFAULT_ID) activeId == null else t?.id == activeId
-                text = if (isActive) "✓  ${t?.name}" else "    ${t?.name}"
-                return this
+        templateList.cellRenderer =
+            object : DefaultListCellRenderer() {
+                override fun getListCellRendererComponent(
+                    list: JList<*>,
+                    value: Any?,
+                    index: Int,
+                    isSelected: Boolean,
+                    cellHasFocus: Boolean,
+                ): java.awt.Component {
+                    super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus)
+                    val t = value as? PromptTemplate
+                    val isActive = if (t?.id == DEFAULT_ID) activeId == null else t?.id == activeId
+                    text = if (isActive) "✓  ${t?.name}" else "    ${t?.name}"
+                    return this
+                }
             }
-        }
 
         templateList.selectionMode = ListSelectionModel.SINGLE_SELECTION
         templateList.addListSelectionListener { e ->
             if (!e.valueIsAdjusting) loadSelected()
         }
 
-        nameField.document.addDocumentListener(object : DocumentListener {
-            override fun insertUpdate(e: DocumentEvent) = syncName()
-            override fun removeUpdate(e: DocumentEvent) = syncName()
-            override fun changedUpdate(e: DocumentEvent) = syncName()
-        })
+        nameField.document.addDocumentListener(
+            object : DocumentListener {
+                override fun insertUpdate(e: DocumentEvent) = syncName()
 
-        contentArea.document.addDocumentListener(object : DocumentListener {
-            override fun insertUpdate(e: DocumentEvent) = syncContent()
-            override fun removeUpdate(e: DocumentEvent) = syncContent()
-            override fun changedUpdate(e: DocumentEvent) = syncContent()
-        })
+                override fun removeUpdate(e: DocumentEvent) = syncName()
+
+                override fun changedUpdate(e: DocumentEvent) = syncName()
+            },
+        )
+
+        contentArea.document.addDocumentListener(
+            object : DocumentListener {
+                override fun insertUpdate(e: DocumentEvent) = syncContent()
+
+                override fun removeUpdate(e: DocumentEvent) = syncContent()
+
+                override fun changedUpdate(e: DocumentEvent) = syncContent()
+            },
+        )
 
         nameField.isEnabled = false
         contentArea.isEnabled = false
@@ -116,25 +137,28 @@ class TemplateManagerDialog(project: Project) : DialogWrapper(project) {
     }
 
     override fun createCenterPanel(): JComponent {
-        val splitter = JSplitPane(JSplitPane.HORIZONTAL_SPLIT, buildLeft(), buildRight()).apply {
-            dividerLocation = 200
-            isContinuousLayout = true
-        }
+        val splitter =
+            JSplitPane(JSplitPane.HORIZONTAL_SPLIT, buildLeft(), buildRight()).apply {
+                dividerLocation = 200
+                isContinuousLayout = true
+            }
         splitter.preferredSize = Dimension(760, 460)
         return splitter
     }
 
     private fun buildLeft(): JComponent {
-        val addBtn = JButton("+ New").apply {
-            addActionListener { addTemplate() }
-        }
+        val addBtn =
+            JButton("+ New").apply {
+                addActionListener { addTemplate() }
+            }
         deleteBtn.addActionListener { deleteSelected() }
 
-        val btnRow = JPanel(FlowLayout(FlowLayout.LEFT, 4, 4)).apply {
-            isOpaque = false
-            add(addBtn)
-            add(deleteBtn)
-        }
+        val btnRow =
+            JPanel(FlowLayout(FlowLayout.LEFT, 4, 4)).apply {
+                isOpaque = false
+                add(addBtn)
+                add(deleteBtn)
+            }
         return JPanel(BorderLayout()).apply {
             border = JBUI.Borders.empty(4, 4, 4, 0)
             add(JBScrollPane(templateList).apply { border = JBUI.Borders.empty() }, BorderLayout.CENTER)
@@ -143,10 +167,11 @@ class TemplateManagerDialog(project: Project) : DialogWrapper(project) {
     }
 
     private fun buildRight(): JComponent {
-        val placeholders = JBLabel("Placeholders:  {query}   {files}   {tree}").apply {
-            font = JBUI.Fonts.smallFont()
-            foreground = JBColor.GRAY
-        }
+        val placeholders =
+            JBLabel("Placeholders:  {query}   {files}   {tree}").apply {
+                font = JBUI.Fonts.smallFont()
+                foreground = JBColor.GRAY
+            }
 
         setActiveBtn.addActionListener {
             activeId = templateList.selectedValue?.id?.takeUnless { it == DEFAULT_ID }
@@ -158,24 +183,26 @@ class TemplateManagerDialog(project: Project) : DialogWrapper(project) {
             contentArea.caretPosition = 0
         }
 
-        val nameRow = JPanel(BorderLayout(JBUI.scale(6), 0)).apply {
-            isOpaque = false
-            border = JBUI.Borders.emptyBottom(8)
-            add(JBLabel("Name:"), BorderLayout.WEST)
-            add(nameField, BorderLayout.CENTER)
-        }
+        val nameRow =
+            JPanel(BorderLayout(JBUI.scale(6), 0)).apply {
+                isOpaque = false
+                border = JBUI.Borders.emptyBottom(8)
+                add(JBLabel("Name:"), BorderLayout.WEST)
+                add(nameField, BorderLayout.CENTER)
+            }
 
         contentArea.lineWrap = true
         contentArea.wrapStyleWord = true
         contentArea.font = java.awt.Font("Monospaced", java.awt.Font.PLAIN, JBUI.Fonts.smallFont().size)
 
-        val bottomRow = JPanel(FlowLayout(FlowLayout.LEFT, 6, 0)).apply {
-            isOpaque = false
-            border = JBUI.Borders.emptyTop(6)
-            add(setActiveBtn)
-            add(resetBtn)
-            add(placeholders)
-        }
+        val bottomRow =
+            JPanel(FlowLayout(FlowLayout.LEFT, 6, 0)).apply {
+                isOpaque = false
+                border = JBUI.Borders.emptyTop(6)
+                add(setActiveBtn)
+                add(resetBtn)
+                add(placeholders)
+            }
 
         return JPanel(BorderLayout()).apply {
             border = JBUI.Borders.empty(4, 8, 4, 4)

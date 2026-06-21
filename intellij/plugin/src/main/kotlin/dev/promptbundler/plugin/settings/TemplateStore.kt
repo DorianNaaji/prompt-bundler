@@ -5,7 +5,11 @@ import com.google.gson.reflect.TypeToken
 import com.intellij.ide.util.PropertiesComponent
 import dev.promptbundler.engine.DefaultTemplate
 
-data class PromptTemplate(val id: String, val name: String, val content: String)
+data class PromptTemplate(
+    val id: String,
+    val name: String,
+    val content: String,
+)
 
 object TemplateStore {
     private const val TEMPLATES_KEY = "dev.promptbundler.templates"
