@@ -25,6 +25,6 @@ jobs:
         run: ./gradlew build verifyPlugin --stacktrace
 
       - name: Publish plugin
-        run: ./gradlew :intellij:plugin:publishPlugin
+        run: ./gradlew :plugin:publishPlugin
         env:
           ORG_GRADLE_PROJECT_intellijPublishToken: ${{ secrets.JETBRAINS_MARKETPLACE_TOKEN }}
