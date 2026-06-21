@@ -2,9 +2,9 @@
 
 > Get your codebase into any AI chat, without the copy-paste hell.
 
-[![JetBrains Plugin Version](https://img.shields.io/jetbrains/plugin/v/32393?label=Marketplace&logo=jetbrains&color=000000)](https://plugins.jetbrains.com/plugin/32393)
-[![JetBrains Plugin Downloads](https://img.shields.io/jetbrains/plugin/d/32393?logo=jetbrains&color=000000)](https://plugins.jetbrains.com/plugin/32393)
-[![JetBrains Plugin Rating](https://img.shields.io/jetbrains/plugin/r/rating/32393?logo=jetbrains&color=000000)](https://plugins.jetbrains.com/plugin/32393)
+[![JetBrains Plugin Version](https://img.shields.io/jetbrains/plugin/v/32393?label=Marketplace&logo=jetbrains&color=000000)](https://plugins.jetbrains.com/plugin/32393-prompt-bundler)
+[![JetBrains Plugin Downloads](https://img.shields.io/jetbrains/plugin/d/32393?logo=jetbrains&color=000000)](https://plugins.jetbrains.com/plugin/32393-prompt-bundler)
+[![JetBrains Plugin Rating](https://img.shields.io/jetbrains/plugin/r/rating/32393?logo=jetbrains&color=000000)](https://plugins.jetbrains.com/plugin/32393-prompt-bundler)
 
 Asking a web AI about your code means copying one file, pasting it, copying the next,
 losing track, and rebuilding your project's structure by hand in a chat box.
