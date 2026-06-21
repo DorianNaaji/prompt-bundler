@@ -12,11 +12,17 @@ package dev.promptbundler.engine
 object PromptAssembler {
     private val PLACEHOLDER = Regex("""\{(tree|files|query)}""")
 
+    // Matches an XML block whose body is only whitespace (empty after substitution).
+    private val EMPTY_XML_BLOCK = Regex("""<\w+>\n+</\w+>\n?""")
+
+    // Collapses three or more consecutive newlines into two (one blank line).
+    private val EXCESS_NEWLINES = Regex("""\n{3,}""")
+
     fun assemble(request: BundleRequest): BundleResult {
-        val tree = TreeRenderer.render(request.items.map { it.relativePath })
+        val tree = TreeRenderer.render(request.items.mapNotNull { it.relativePath })
         val files = FileBlockRenderer.render(request.items)
 
-        val text =
+        val raw =
             PLACEHOLDER.replace(request.options.template) { match ->
                 when (match.groupValues[1]) {
                     "tree" -> tree
@@ -25,6 +31,7 @@ object PromptAssembler {
                     else -> match.value
                 }
             }
+        val text = EXCESS_NEWLINES.replace(EMPTY_XML_BLOCK.replace(raw, ""), "\n\n")
         return BundleResult(text)
     }
 }

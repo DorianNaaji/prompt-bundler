@@ -76,6 +76,24 @@ class PromptAssemblerTest {
     }
 
     @Test
+    fun `label snippet renders as a context block outside the tree`() {
+        val request =
+            BundleRequest(
+                query = "Why does this test fail?",
+                items =
+                    listOf(
+                        ContextItem("src/test/kotlin/AppTest.kt", "@Test fun works() = fail()\n"),
+                        ContextItem(
+                            content = "AppTest > works() FAILED\n    java.lang.AssertionError\n",
+                            // Special characters in the label must be XML-escaped in the attribute.
+                            label = "Console output (Run: A & B \"x\" <y>)",
+                        ),
+                    ),
+            )
+        GoldenSupport.assertMatches("console-output.txt", PromptAssembler.assemble(request).text)
+    }
+
+    @Test
     fun `paths with special characters`() {
         val request =
             BundleRequest(
@@ -102,6 +120,12 @@ class PromptAssemblerTest {
         assertEquals(one, two, "order must not affect output")
         assertEquals(one, three, "order must not affect output")
         GoldenSupport.assertMatches("stable-order.txt", one)
+    }
+
+    @Test
+    fun `no context items omits wrapper tags`() {
+        val request = BundleRequest(query = "What is 2+2?", items = emptyList())
+        GoldenSupport.assertMatches("no-context.txt", PromptAssembler.assemble(request).text)
     }
 
     @Test

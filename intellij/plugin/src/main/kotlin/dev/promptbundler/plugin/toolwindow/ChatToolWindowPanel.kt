@@ -47,6 +47,7 @@ import dev.promptbundler.plugin.context.ContextBundleService
 import dev.promptbundler.plugin.session.PersistedSession
 import dev.promptbundler.plugin.session.SessionHistoryListener
 import dev.promptbundler.plugin.session.SessionHistoryService
+import dev.promptbundler.plugin.settings.TemplateManagerDialog
 import dev.promptbundler.plugin.support.DonationReminder
 import dev.promptbundler.plugin.support.PromptBundlerIcons
 import dev.promptbundler.plugin.support.PropertiesDonationStore
@@ -359,6 +360,8 @@ class ChatToolWindowPanel(
                 add(donateButton())
                 add(Box.createHorizontalStrut(JBUI.scale(4)))
                 add(helpButton())
+                add(Box.createHorizontalStrut(JBUI.scale(4)))
+                add(templateButton())
                 add(Box.createHorizontalStrut(JBUI.scale(6)))
                 add(IconActionButton(AllIcons.General.Add, "New session") { newSession() })
             }
@@ -404,6 +407,8 @@ class ChatToolWindowPanel(
                         isOpaque = false
                         add(donateButton())
                         add(helpButton())
+                        add(Box.createHorizontalStrut(JBUI.scale(4)))
+                        add(templateButton())
                         add(Box.createHorizontalStrut(JBUI.scale(6)))
                         add(IconActionButton(AllIcons.General.Add, "New session") { newSession() })
                     },
@@ -717,7 +722,7 @@ class ChatToolWindowPanel(
      * outside this tool window and are easy to miss. Anchored on the button itself.
      */
     private fun donateButton(): JComponent =
-        IconActionButton(PromptBundlerIcons.Donate, "Support Prompt Bundler - buy me a coffee") {
+        IconActionButton(PromptBundlerIcons.Donate, "Support Prompt Bundler") {
             BrowserUtil.browse(DonationReminder.DONATION_URL)
         }
 
@@ -730,6 +735,11 @@ class ChatToolWindowPanel(
         anchor[0] = button
         return button
     }
+
+    private fun templateButton(): JComponent =
+        IconActionButton(AllIcons.General.Settings, "Manage prompt templates") {
+            TemplateManagerDialog(project).showAndGet()
+        }
 
     private fun showAttachHelp(anchor: JComponent) {
         val html =

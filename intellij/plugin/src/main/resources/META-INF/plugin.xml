@@ -67,5 +67,12 @@
                 icon="/icons/promptBundler.svg">
             <add-to-group group-id="EditorPopupMenu" anchor="last"/>
         </action>
+        <action id="PromptBundler.AddConsoleOutput"
+                class="dev.promptbundler.plugin.actions.AddConsoleOutputToContextAction"
+                text="Add Console Output to Prompt Bundler"
+                description="Attach the console output (selection or full text) to the Prompt Bundler context"
+                icon="/icons/promptBundler.svg">
+            <add-to-group group-id="ConsoleEditorPopupMenu" anchor="last"/>
+        </action>
     </actions>
 </idea-plugin>

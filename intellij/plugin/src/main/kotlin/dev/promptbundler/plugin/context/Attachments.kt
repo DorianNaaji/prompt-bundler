@@ -40,6 +40,26 @@ object Attachments {
         lines: IntRange,
     ): ContextItem = ContextItem(relativePath(project, file), text, lines)
 
+    /** Maximum number of characters captured from a console before truncation kicks in. */
+    const val MAX_CONSOLE_CHARS = 20_000
+
+    /**
+     * Builds a path-less snippet from captured console [text], identified by [label] and
+     * truncated past [MAX_CONSOLE_CHARS] with an explicit marker rather than failing. The
+     * tail is kept (test runners surface failures at the end), so the most relevant part of a
+     * huge console survives without producing an oversized prompt.
+     */
+    fun consoleSnippet(
+        text: String,
+        label: String,
+    ): ContextItem = ContextItem(content = truncateConsole(text), label = label)
+
+    private fun truncateConsole(text: String): String {
+        if (text.length <= MAX_CONSOLE_CHARS) return text
+        val omitted = text.length - MAX_CONSOLE_CHARS
+        return "[... truncated $omitted characters ...]\n" + text.substring(text.length - MAX_CONSOLE_CHARS)
+    }
+
     /**
      * Recursively collects attachable files from [roots] (files or directories). A directory
      * contributes all eligible descendants; ineligible files (excluded, ignored, hidden,

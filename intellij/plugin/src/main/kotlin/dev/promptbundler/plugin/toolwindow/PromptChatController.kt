@@ -2,9 +2,11 @@ package dev.promptbundler.plugin.toolwindow
 
 import com.intellij.openapi.ide.CopyPasteManager
 import com.intellij.openapi.project.Project
+import dev.promptbundler.engine.BundleOptions
 import dev.promptbundler.engine.BundleRequest
 import dev.promptbundler.engine.PromptAssembler
 import dev.promptbundler.plugin.context.ContextBundleService
+import dev.promptbundler.plugin.settings.TemplateStore
 import java.awt.datatransfer.StringSelection
 
 /**
@@ -24,7 +26,8 @@ class PromptChatController(
      */
     fun buildMetaPrompt(query: String): String {
         val items = ContextBundleService.getInstance(project).items
-        return PromptAssembler.assemble(BundleRequest(query, items)).text
+        val options = BundleOptions(template = TemplateStore.activeTemplate)
+        return PromptAssembler.assemble(BundleRequest(query, items, options)).text
     }
 
     /** Places [text] verbatim on the system clipboard. */

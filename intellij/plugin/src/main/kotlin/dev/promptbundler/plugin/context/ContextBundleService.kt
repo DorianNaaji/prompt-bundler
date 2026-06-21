@@ -81,10 +81,16 @@ class ContextBundleService(
 
     private fun publish() = project.messageBus.syncPublisher(TOPIC).onChanged()
 
-    private fun keyOf(item: ContextItem): String = item.lines?.let { "${item.relativePath}#${it.first}-${it.last}" } ?: item.relativePath
+    // Label-backed snippets (console output) key on label + content so an unchanged re-capture
+    // dedups, while re-running and attaching a different output adds a fresh chip.
+    private fun keyOf(item: ContextItem): String {
+        val path = item.relativePath ?: return "label:${item.label}:${item.content.hashCode()}"
+        return item.lines?.let { "$path#${it.first}-${it.last}" } ?: path
+    }
 
     private fun labelOf(item: ContextItem): String {
-        val name = item.relativePath.substringAfterLast('/')
+        val path = item.relativePath ?: return item.label ?: "Snippet"
+        val name = path.substringAfterLast('/')
         return item.lines?.let { "$name:${it.first}-${it.last}" } ?: name
     }
 
