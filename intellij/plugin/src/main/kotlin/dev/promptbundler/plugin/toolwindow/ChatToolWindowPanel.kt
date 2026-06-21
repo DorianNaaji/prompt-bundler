@@ -32,6 +32,7 @@ import com.intellij.ui.components.JBScrollPane
 import com.intellij.ui.components.JBTextArea
 import com.intellij.ui.components.TextComponentEmptyText
 import com.intellij.ui.components.panels.VerticalLayout
+import com.intellij.ui.scale.JBUIScale
 import com.intellij.util.IconUtil
 import com.intellij.util.concurrency.AppExecutorUtil
 import com.intellij.util.text.DateFormatUtil
@@ -1195,7 +1196,7 @@ private class SendButton(
 
             // Up arrow.
             g2.color = if (isEnabled) JBColor(0xFFFFFF, 0xFFFFFF) else JBColor.namedColor("Label.disabledForeground", JBColor.LIGHT_GRAY)
-            g2.stroke = BasicStroke(JBUI.scale(1.6f), BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND)
+            g2.stroke = BasicStroke(JBUIScale.scale(1.6f), BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND)
             val cx = width / 2
             val top = JBUI.scale(8)
             val bottom = height - JBUI.scale(8)
