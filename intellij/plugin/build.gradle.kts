@@ -5,7 +5,7 @@ plugins {
     alias(libs.plugins.intellij.platform)
 }
 
-version = "1.0.0-rc"
+version = "1.0.0"
 
 kotlin {
     jvmToolchain(21)
@@ -58,5 +58,9 @@ intellijPlatform {
         ides {
             recommended()
         }
+    }
+
+    publishing {
+        token = providers.gradleProperty("intellijPublishToken")
     }
 }
