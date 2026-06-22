@@ -9,7 +9,7 @@
 Asking a web AI about your code means copying one file, pasting it, copying the next,
 losing track, and rebuilding your project's structure by hand in a chat box.
 
-PromptBundler does it for you: pick the files, get one clean, structured prompt, paste it
+Prompt Bundler does it for you: pick the files, get one clean, structured prompt, paste it
 wherever you want.
 
 ## Works with any chat
@@ -20,7 +20,7 @@ LLM. The output is plain text on your clipboard, so it goes anywhere.
 ## What it does
 
 Attach files, whole folders, or a selected snippet from the editor, then ask your question
-in the tool window. PromptBundler assembles a single, well-structured prompt (a file tree
+in the tool window. Prompt Bundler assembles a single, well-structured prompt (a file tree
 plus the exact file contents) ready on your clipboard.
 
 - Attach context from the Project view, the editor selection, drag and drop, or a quick picker.
@@ -31,7 +31,7 @@ plus the exact file contents) ready on your clipboard.
 
 ## Private by design
 
-No API calls, no account, no network. PromptBundler reads the files you pick and writes
+No API calls, no account, no network. Prompt Bundler reads the files you pick and writes
 text to your clipboard. Your code never leaves your machine until you paste it, yourself,
 into the chat your company approves.
 
@@ -47,7 +47,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Support
 
-PromptBundler is free and open source, with no API, no account, and no network. If it saves you from copy-paste hell, you can support the project.
+Prompt Bundler is free and open source, with no API, no account, and no network. If it saves you from copy-paste hell, you can support the project.
 
 [![Sponsor on GitHub](https://img.shields.io/badge/Sponsor-DorianNaaji-EA4AAA?logo=githubsponsors&logoColor=white)](https://github.com/sponsors/DorianNaaji)
 [![Buy Me a Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-support-FFDD00?logo=buymeacoffee&logoColor=black)](https://buymeacoffee.com/dorian.naaji)
