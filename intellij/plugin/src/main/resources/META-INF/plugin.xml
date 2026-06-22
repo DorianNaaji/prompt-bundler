@@ -4,16 +4,15 @@
     <vendor url="https://github.com/promptbundler/promptbundler">Prompt Bundler</vendor>
 
     <description><![CDATA[
-        <b>PromptBundler</b><br/>
         <em>Get your codebase into any AI chat, without the copy-paste hell.</em>
         <br/><br/>
         Pasting code into a web chat usually means hunting files, copying them one by one, and losing the
-        project structure that makes an answer good. <b>PromptBundler</b> fixes that: pick your files, get one
+        project structure that makes an answer good. <b>Prompt Bundler</b> fixes that: pick your files, get one
         clean, structured prompt, and paste it wherever you want.
         <br/><br/>
         <b>🚀 What it does</b><br/>
         Attach files, whole folders, or a selected snippet, then ask your question in the tool window.
-        PromptBundler assembles a single, well-structured prompt ready on your clipboard.
+        Prompt Bundler assembles a single, well-structured prompt ready on your clipboard.
         <ul>
             <li><b>Seamless Context Gathering:</b> Attach files via the Project view, editor selection,
                 drag-and-drop, or a quick picker.</li>
@@ -26,7 +25,7 @@
                 prompts.</li>
         </ul>
         <b>🔒 Private by design</b><br/>
-        No API calls, no accounts, no network. PromptBundler strictly reads selected files and writes plain
+        No API calls, no accounts, no network. Prompt Bundler strictly reads selected files and writes plain
         text to your clipboard. Your code never leaves your machine until you paste it into the chat you or
         your company approves.
         <br/><br/>
@@ -36,7 +35,7 @@
         them.
         <br/><br/>
         <b>❤️ Support the project</b><br/>
-        PromptBundler is completely free, open-source, and runs entirely offline. If it saves you from
+        Prompt Bundler is completely free, open-source, and runs entirely offline. If it saves you from
         copy-paste hell, you can support the development here:
         <br/>
         <a href="https://github.com/sponsors/DorianNaaji">Sponsor on GitHub</a> &nbsp;

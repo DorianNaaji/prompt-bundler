@@ -1,6 +1,6 @@
-# Contributing to PromptBundler
+# Contributing to Prompt Bundler
 
-Thanks for your interest in improving PromptBundler. This guide covers the basics.
+Thanks for your interest in improving Prompt Bundler. This guide covers the basics.
 
 ## Prerequisites
 
