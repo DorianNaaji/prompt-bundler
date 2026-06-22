@@ -891,16 +891,21 @@ class ChatToolWindowPanel(
     }
 
     private fun attach(files: Array<VirtualFile>) {
-        // Attachments.collect reads file contents, forbidden on the EDT (it throws
-        // "This method is forbidden on EDT..."). Collect under a background read action, then
-        // publish to the service and notify back on the UI thread.
+        // Attachments.collect reads file contents — calling it on EDT is forbidden.
+        // We collect on a background read-action thread, then dispatch the result to EDT via
+        // invokeLater rather than finishOnUiThread: in IJ 2026.2+ the latter acquires a
+        // write-intent lock that races with DaemonFusReporter and triggers a read-action
+        // violation inside the new multiverse code (IDEA-373846).
         ReadAction
             .nonBlocking<CollectResult> { Attachments.collect(project, files) }
             .expireWith(this)
-            .finishOnUiThread(ModalityState.defaultModalityState()) { result ->
-                service.add(result.items)
-                AttachmentNotifications.notifySkipped(project, result.skipped)
-            }.submit(AppExecutorUtil.getAppExecutorService())
+            .submit(AppExecutorUtil.getAppExecutorService())
+            .onSuccess { result ->
+                invokeLater {
+                    service.add(result.items)
+                    AttachmentNotifications.notifySkipped(project, result.skipped)
+                }
+            }
     }
 
     /**
