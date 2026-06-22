@@ -5,7 +5,7 @@ plugins {
     alias(libs.plugins.intellij.platform)
 }
 
-version = "1.0.3"
+version = "1.0.2"
 
 kotlin {
     jvmToolchain(21)

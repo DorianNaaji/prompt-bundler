@@ -2,7 +2,9 @@ package dev.promptbundler.plugin.actions
 
 import com.intellij.openapi.actionSystem.CommonDataKeys
 import com.intellij.openapi.actionSystem.impl.SimpleDataContext
+import com.intellij.openapi.application.impl.NonBlockingReadActionImpl
 import com.intellij.openapi.vfs.VirtualFile
+import com.intellij.testFramework.PlatformTestUtil
 import com.intellij.testFramework.TestActionEvent
 import com.intellij.testFramework.fixtures.BasePlatformTestCase
 import dev.promptbundler.plugin.context.ContextBundleService
@@ -25,6 +27,10 @@ class AddFilesToBundleActionTest : BasePlatformTestCase() {
                 .add(CommonDataKeys.VIRTUAL_FILE_ARRAY, arrayOf(*files))
                 .build()
         action.actionPerformed(TestActionEvent.createTestEvent(action, context))
+        // actionPerformed is now async: wait for the background ReadAction to finish,
+        // then flush the EDT queue to process the invokeLater dispatched by onSuccess.
+        NonBlockingReadActionImpl.waitForAsyncTaskCompletion()
+        PlatformTestUtil.dispatchAllEventsInIdeEventQueue()
     }
 
     fun testAddsSingleFile() {
